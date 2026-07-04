@@ -1,131 +1,154 @@
 # Implementation plan: whisper-flow-local
 
-A local Wispr Flow clone: global-hotkey dictation that types polished text into any
-app, with all processing on-device — Whisper-family STT + an Ollama-hosted LLM for the
-cleanup/formatting pass. Grounded in the findings in [RESEARCH.md](RESEARCH.md).
+An **original**, fully local Wispr Flow-style dictation app: global-hotkey dictation
+that types polished text into any app, all processing on-device — Whisper-family STT +
+an Ollama-hosted LLM cleanup pass. Every design choice below is grounded in the
+verified findings ([RESEARCH.md](RESEARCH.md)) and the 256-trait prior-art matrix
+([TRAITS.md](TRAITS.md)).
+
+**Build-our-own stance.** We adopt *traits* from prior art, never code. This keeps the
+design free to combine the best of twelve projects and keeps us license-clean of the
+GPL-3 ones (VoiceInk, WhisperWriter, nerd-dictation). Our license: MIT.
 
 ## Goals
 
-- Hold (or toggle) a global hotkey → speak → release → cleaned, punctuated text appears
-  at the cursor in the focused app.
-- 100% offline. No audio, transcript, or context ever leaves the machine.
-- End-to-end latency target: **≤ 1.5 s** from key release to injected text on mid-range
-  hardware (Wispr Flow's cloud pipeline achieves ~700 ms; local clones prove ~1–1.5 s
-  feels fine).
-- Cleanup stage on **Ollama** with two modes: *cleanup* (fillers, punctuation,
-  capitalization, self-corrections) and *instruction* (user-directed transforms).
+- Tap-or-hold a global hotkey → speak → release → cleaned, punctuated text appears at
+  the cursor in the focused app.
+- 100% local, verifiably: no cloud code paths, zero telemetry, audio in RAM and
+  discarded by default. (Verified: Wispr Flow cannot offer this — transcription always
+  happens in their cloud.)
+- Latency ≤ 1.5 s from key release on mid-range hardware (Wispr's verified cloud budget
+  is ~700 ms; local prior art proves ~1–1.5 s feels fine). On strong hardware (e.g.
+  Apple Silicon M3 + whisper.cpp Metal + a warm 4B Ollama model) expect ~1 s or less.
+- Ollama cleanup **first-class and on by default** — the gap no existing project fills.
 
 ## Non-goals (v1)
 
-- Streaming transcription while still speaking (hardest gap vs Wispr Flow; revisit in
-  Phase 5 via two-tier models or parakeet.cpp streaming).
-- Mobile, screenshots-based context awareness, cloud fallback of any kind.
+Streaming-while-speaking preview, screen-content capture, correction-learning loop,
+voice editing of selected text — all deliberately Phase 5+ (they're our differentiation
+roadmap, not MVP).
 
-## Stack decision
+## Stack
 
-**Python 3.11+** single package with pluggable backends. Rationale: the entire pipeline
-is proven in pure Python (WhisperWriter, Murmur); fastest iteration; every needed
-library has first-class Python bindings. A Rust/Tauri rewrite (à la Handy) is a
-possible v2 once the pipeline is settled.
+**Python 3.11+** daemon + thin CLI. The full pipeline is proven in pure Python
+(WhisperWriter, Murmur); fastest iteration; every dependency has first-class bindings.
 
-| Concern | Choice | Alternative kept pluggable |
+| Concern | Choice | Notes |
 |---|---|---|
-| Audio capture | `sounddevice` (PortAudio), 16 kHz mono | — |
-| VAD | `silero-vad` (also faster-whisper's `vad_filter`) | webrtcvad |
-| STT | `faster-whisper` `small.en` (CUDA/CPU) | `pywhispercpp` (whisper.cpp, Metal/CoreML) on macOS; Parakeet later |
-| Cleanup LLM | Ollama HTTP API (`/api/chat`), default `qwen2.5:7b` | `llama3.2:3b` / `gemma3:4b` on weak hardware |
-| Hotkeys | `pynput` | compositor keybind + CLI trigger on Wayland |
-| Text injection | clipboard-paste with clipboard restore | keystroke simulation; per-OS fallback chain |
-| Tray/status | `pystray` + minimal overlay | none (CLI mode) |
-| Config | `config.yaml` + personal dictionary files | — |
+| Audio | `sounddevice`, 16 kHz mono ring buffer | RAM-only by default; 5-min safety cap |
+| VAD | webrtcvad/RMS endpointing + Silero (`vad_filter=True`) | two layers, default-on |
+| STT | `STTBackend` interface: **faster-whisper** default; **pywhispercpp** (Metal/CoreML) on macOS | temperature 0, `condition_on_previous_text=False`; model resident with unload timeout |
+| Cleanup | Ollama `/api/chat`, default **gemma3:4b**-class, `keep_alive` | warn below ~3B; user's installed models listed via `/api/tags` |
+| Hotkeys | pluggable: pynput default, evdev (Linux), Quartz tap (macOS bare modifiers) | plus IPC verbs for compositor binds |
+| Injection | `Injector` chain: clipboard-paste (snapshot/restore, layout-aware) → char-typing → copy-only | never simulates Enter unless Auto-Submit opted in |
+| UI | `pystray` tray + tiny overlay (3 states) + audio cues | headless `--no-ui` mode |
+| Config | schema-driven TOML at `~/.config/whisper-flow/` | schema generates CLI help, settings UI, docs |
 
 ## Architecture
 
-Pipeline state machine (borrowed from Hyprvoice):
-`idle → recording → transcribing → cleaning (optional) → injecting → idle`
+Daemon with an explicit state machine (abort paths from every state):
+
+```
+idle → recording → transcribing → cleaning (optional) → injecting → idle
+```
 
 ```
 whisper_flow_local/
-├── app.py               # orchestrator: state machine, wiring, tray
-├── config.py            # YAML config load/validate, defaults
-├── hotkeys.py           # pynput listener: hold-to-talk & toggle modes
-├── audio.py             # sounddevice capture ring buffer, 16 kHz mono
-├── vad.py               # silero-vad: auto-stop on silence (configurable, ~2 s)
-├── stt/
-│   ├── base.py          # TranscriberBackend protocol
-│   ├── fasterwhisper.py # default backend (vad_filter, initial_prompt w/ dictionary)
-│   └── whispercpp.py    # macOS/Metal backend (Phase 4)
-├── cleanup/
-│   ├── ollama.py        # /api/chat client, keep_alive, timeout→raw-text fallback
-│   ├── prompts.py       # cleanup & instruction system prompts, per-app profiles
-│   └── replace.py       # personal dictionary: literal pairs + regex rules
-├── inject/
-│   ├── base.py          # Injector protocol + fallback-chain runner
-│   ├── clipboard.py     # paste w/ save & restore of prior clipboard
-│   ├── keystrokes.py    # pynput typing fallback
-│   └── linux.py         # xdotool (X11) / wtype→ydotool (Wayland) chain
-└── ui/
-    └── tray.py          # status: idle / listening / processing
+├── daemon.py          # state machine, single-instance socket, orchestration
+├── ipc.py             # Unix-socket/named-pipe verbs: toggle|ptt-down|ptt-up|cancel|
+│                      #   status|paste-last|paste-last-raw ; `whisper-flow` CLI wraps it
+├── config.py          # one schema module: type/default/options/description per setting
+├── hotkeys/           # pynput | evdev | quartz backends; hybrid tap/hold semantics
+├── audio.py           # ring buffer, device picker, cues, media auto-pause (optional)
+├── vad.py             # endpointing layer + Silero scrub
+├── stt/               # base.py, fasterwhisper.py, whispercpp.py, bench.py
+├── cleanup/           # ollama.py, prompts.py (boolean goals→prompt), gate (50 chars)
+├── dictionary/        # vocab hints (≤20 → initial_prompt) + layered replacements
+├── inject/            # base chain runner, clipboard.py, keystrokes.py, linux.py
+├── profiles.py        # per-app match rules → prompt/replacements/injection overrides
+├── history.py         # last-N dictations (raw + cleaned), re-paste; opt-in persistence
+└── ui/                # tray, overlay, notifications
 ```
 
-Key design rules learned from prior art:
+Key rules (each traceable to TRAITS.md):
 
-- **LLM failure must never eat a dictation**: on Ollama timeout/error, inject the raw
-  transcript. Cleanup is an enhancement, not a gate.
-- **Skip cleanup for short utterances** (< ~50 chars, configurable) — latency guard
-  proven by local-whisper.
-- **Personal dictionary feeds both stages**: keywords go into Whisper's
-  `initial_prompt` *and* the LLM system prompt; literal/regex replacements run after.
-- **Clipboard restore always**: never clobber what the user had copied.
-- **Warm starts**: preload the STT model at launch; use Ollama `keep_alive` so the
-  cleanup model stays resident.
+- **Cleanup is never a gate**: Ollama timeout/error → inject the raw transcript.
+- **Skip cleanup under ~50 chars** (configurable).
+- **Deterministic replacements run before the LLM**, so dictionary fixes are reliable.
+- **Raw and cleaned are both kept**; separate paste-last-raw / paste-last-enhanced.
+- **Clipboard is always snapshotted and restored**; paste keycode resolved from the
+  active keyboard layout; no blind sleeps — verify clipboard ownership before firing.
+- **Never press Enter** unless the user opts into Auto-Submit.
+- **Record-start app detection** (not after STT) drives per-app profiles; terminals and
+  editors get no-auto-capitalization.
+- **Models stay warm**: STT resident in the daemon with configurable unload; Ollama
+  `keep_alive` pinned.
 
-### Cleanup prompt (v1 sketch)
+### Cleanup prompt (compiled from boolean goals)
+
+Goals (each a config toggle): punctuation, grammar, filler removal, stutter/self-
+correction collapse, list formatting. Compiled into a short plain-text prompt — no XML
+tags (small models misread them):
 
 ```
-System: You clean up dictated speech. Fix punctuation, capitalization, and obvious
-homophone errors. Remove filler words (um, uh, like, you know). Apply the speaker's
-self-corrections ("no wait, make that X" → X). Format numbered/bulleted lists when
-dictated. NEVER add, answer, summarize, or omit content. Output only the cleaned text.
-User: <raw transcript>
+You clean up dictated speech. Fix punctuation and capitalization. Remove filler
+words (um, uh, like, you know). Apply self-corrections ("no wait, X" → X). Format
+dictated lists. Never add, answer, summarize, or omit content. Output only the
+cleaned text.
 ```
 
-Temperature 0, no streaming needed (we inject once at the end).
+Temperature 0. User-overridable template with `${output}` placeholder; per-app profiles
+may swap the prompt (casual for chat, formal for email).
+
+## Locked-down machines (e.g. corporate MDM)
+
+First-class **copy-only mode**: the pipeline ends at the clipboard (no Accessibility
+permission needed on macOS; user pastes with Cmd+V), and the tray/menu icon can start
+recording if even Input Monitoring is restricted. The injector chain's final fallback is
+this mode, and the first-run dependency report says exactly which level the machine
+supports. No workarounds of corporate controls — degrade gracefully instead.
 
 ## Phases
 
-**Phase 0 — Scaffold** ✅-able immediately
-Package layout above, `pyproject.toml`, `config.yaml` defaults, README quickstart
-(install Ollama, `ollama pull qwen2.5:7b`, model auto-download for STT).
+**Phase 0 — Scaffold.** Package layout, schema-driven config, `pyproject.toml`, README
+quickstart (`uvx whisper-flow-local`; auto-download small STT model; detect Ollama and
+list installed models). First-run dependency report.
 
-**Phase 1 — Core loop (MVP)**
-Hold-hotkey → record → faster-whisper → clipboard-paste inject. No LLM yet.
-Exit criterion: dictate into any text field on the dev machine, < 1 s for a sentence.
+**Phase 1 — Core loop (MVP).** Daemon + state machine + IPC verbs; hybrid hotkey
+(tap-toggle / hold-PTT, 0.5 s discriminator, ~150 ms discard, release grace);
+record → faster-whisper → clipboard-paste inject with snapshot/restore.
+*Exit: dictate into any app; <1 s for a sentence; cancel works from every state.*
 
-**Phase 2 — Ollama cleanup**
-`cleanup/` module: cleanup mode, short-text skip, timeout fallback, keep_alive,
-before/after logging (local only). Exit criterion: fillers/punctuation fixed, E2E
-≤ 1.5 s for a 10-second utterance on target hardware.
+**Phase 2 — Ollama cleanup.** Boolean-goals prompt builder; 50-char gate; timeout →
+raw fallback; keep_alive; raw+cleaned history with paste-last-raw/enhanced; second
+hotkey for raw-vs-cleaned intent.
+*Exit: fillers/punctuation fixed; E2E ≤1.5 s for a 10 s utterance; unplugging Ollama
+mid-flight still injects raw text.*
 
-**Phase 3 — Robustness & UX**
-Toggle mode + VAD auto-stop; tray status; personal dictionary (replace rules +
-initial_prompt keywords); config hot-reload; graceful device/permission errors.
+**Phase 3 — Dictation quality.** Two-layer VAD default-on; continuous mode
+(auto-rearm); dictionary (vocab hints + layered replacements + quick-add hotkey);
+tray + overlay + cues; recent-dictations re-paste.
 
-**Phase 4 — Cross-platform hardening**
-Injection fallback chains per OS (X11/Wayland/macOS permissions docs); whisper.cpp
-backend for Apple Silicon; packaging (pipx / PyInstaller).
+**Phase 4 — Cross-platform hardening.** whisper.cpp Metal/CoreML backend for Apple
+Silicon; injection chains per OS (X11 xdotool / Wayland wtype→ydotool→clipboard) with
+startup detection; macOS permissions onboarding (Microphone, Input Monitoring,
+Accessibility — each optional with graceful degradation); packaging (pipx/brew/AUR +
+systemd user unit/winget); `whisper-flow bench` model benchmark.
 
-**Phase 5 — Wispr-parity extras (optional)**
-Instruction mode ("make this formal") on selected text; per-app tone profiles via
-active-window detection; two-tier live preview (tiny model streaming, small.en final);
-Parakeet backend for English speed.
+**Phase 5 — Differentiators (the unclaimed gaps).** Per-app tone profiles
+(cross-platform — nobody has this); voice editing of selected text ("make this formal");
+correction learning (accepted edits → vocabulary/replacements/few-shot examples);
+streaming tiny-model preview; transparency log (exactly what was sent to the LLM);
+verified injection (focus check, buffer-on-focus-loss).
 
 ## Risks
 
 | Risk | Mitigation |
 |---|---|
-| Small LLM rewrites meaning or answers instead of cleaning | Strict system prompt, temperature 0, "output only the text", test suite of adversarial transcripts; fallback to raw text |
-| Wayland global hotkeys/injection are fragmented | Documented compositor-keybind escape hatch + wtype/ydotool/clipboard chain |
-| Latency on CPU-only machines | `small.en`/`base.en` INT8 (8–12× real-time on CPU), 3b-class cleanup model, or cleanup off |
-| Whisper hallucinates on silence | Silero VAD filter on by default |
-| macOS permissions (mic + accessibility) | First-run checklist in README + explicit permission checks with clear errors |
+| Small LLM rewrites meaning / answers instead of cleaning | Strict short prompt, temp 0, adversarial transcript test suite, raw-text fallback, both versions kept |
+| Wayland fragmentation (hotkeys + injection) | IPC verbs for compositor binds; detected fallback chain; copy-only floor |
+| Corporate MDM blocks Accessibility/Input Monitoring | Copy-only mode is first-class, not a hack; ask IT, never bypass |
+| CPU-only machines | small.en INT8 (8–12× real-time on CPU), 3–4B cleanup model, or cleanup off |
+| Whisper silence hallucinations | Silero VAD default-on + min-duration discard |
+| Non-QWERTY layouts garbled by char-typing | Layout-aware keycode resolution; clipboard-paste primary |
+| Scope creep (the prior-art disease) | Phases 0–4 ship nothing but the dictation loop; Phase 5 gated on core being solid |
