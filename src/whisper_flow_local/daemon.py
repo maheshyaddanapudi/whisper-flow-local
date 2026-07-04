@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from .controller import Controller
+from .hotkeys.base import HotkeyListener
 from .ipc import Dispatch, IPCError, IPCServer
 from .pipeline_state import State
 
@@ -53,10 +54,12 @@ class Daemon:
         controller: Controller,
         socket_path: Path,
         *,
+        hotkey_listener: HotkeyListener | None = None,
         ui_notify: Callable[[State], None] | None = None,
     ) -> None:
         self._controller = controller
         self._server = IPCServer(socket_path, make_dispatch(controller))
+        self._hotkey_listener = hotkey_listener
         self._ui_notify = ui_notify
         self._stop = threading.Event()
 
@@ -66,9 +69,13 @@ class Daemon:
 
     def start(self) -> None:
         self._server.start()
+        if self._hotkey_listener is not None:
+            self._hotkey_listener.start()
 
     def stop(self) -> None:
         self._stop.set()
+        if self._hotkey_listener is not None:
+            self._hotkey_listener.stop()
         self._server.stop()
 
     def on_state_change(self, state: State) -> None:  # pragma: no cover - UI seam

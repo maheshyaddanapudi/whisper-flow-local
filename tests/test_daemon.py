@@ -94,3 +94,23 @@ def test_daemon_controller_property(tmp_path) -> None:
     ctl = _controller()
     daemon = Daemon(ctl, tmp_path / "wf.sock")
     assert daemon.controller is ctl
+
+
+def test_daemon_manages_hotkey_listener(tmp_path) -> None:
+    class FakeListener:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+
+        def start(self) -> None:
+            self.started = True
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    listener = FakeListener()
+    daemon = Daemon(_controller(), tmp_path / "wf.sock", hotkey_listener=listener)
+    daemon.start()
+    assert listener.started
+    daemon.stop()
+    assert listener.stopped

@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import platform
 import sys
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from . import __version__
@@ -71,6 +72,10 @@ def _build_parser() -> argparse.ArgumentParser:
     add = dct_sub.add_parser("add", help="Add a vocabulary word.")
     add.add_argument("word", help="The word or phrase to add.")
 
+    bench = sub.add_parser("bench", help="Benchmark STT models on this hardware.")
+    bench.add_argument("--audio", required=True, type=Path, help="Sample WAV file to transcribe.")
+    bench.add_argument("--models", nargs="+", help="Model names to test (default: configured).")
+
     sub.add_parser("start", help="Run the dictation daemon (foreground).")
     for verb in _CONTROL_VERBS:
         sub.add_parser(verb, help=f"Send '{verb}' to the running daemon.")
@@ -85,8 +90,13 @@ def _resolve_config_path(args: argparse.Namespace) -> Path:
 def _cmd_doctor(config: Config) -> int:
     # Imported lazily so `doctor` is the only path that probes Ollama.
     from .deps import render_report
+    from .permissions import render as render_permissions
 
     print(render_report(config))
+    perm = render_permissions(platform.system())
+    if perm:
+        print()
+        print(perm)
     return 0
 
 
@@ -156,6 +166,50 @@ def _cmd_send(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_bench(config: Config, args: argparse.Namespace) -> int:
+    import wave
+
+    from .stt.bench import format_table, run_bench
+
+    if not args.audio.exists():
+        print(f"error: audio file not found: {args.audio}", file=sys.stderr)
+        return 1
+    models = args.models or [str(config.get("stt.model"))]
+    with wave.open(str(args.audio), "rb") as wav:
+        audio_seconds = wav.getnframes() / float(wav.getframerate())
+    timer = _make_bench_timer(config, args.audio)
+    results = run_bench(models, timer)
+    print(format_table(results, audio_seconds))
+    return 0
+
+
+def _make_bench_timer(  # pragma: no cover - hardware seam
+    config: Config, audio: Path
+) -> Callable[[str], float]:
+    import time
+
+    from .audio import AudioBuffer
+    from .build import _build_stt
+
+    def timer(model: str) -> float:
+        cfg = Config(dict(config.data))
+        cfg.data.setdefault("stt", {})["model"] = model
+        backend = _build_stt(cfg)
+        import wave
+
+        import numpy as np
+
+        with wave.open(str(audio), "rb") as wav:
+            frames = wav.readframes(wav.getnframes())
+            data = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+            buf = AudioBuffer(data=data, sample_rate=wav.getframerate())
+        start = time.monotonic()
+        backend.transcribe(buf)
+        return time.monotonic() - start
+
+    return timer
+
+
 def _cmd_start(config: Config, args: argparse.Namespace) -> int:
     from .build import build_daemon
 
@@ -185,6 +239,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_gen_docs()
     if args.command == "dict":
         return _cmd_dict(args, config)
+    if args.command == "bench":
+        return _cmd_bench(config, args)
     if args.command == "start":
         return _cmd_start(config, args)
     if args.command in _CONTROL_VERBS:

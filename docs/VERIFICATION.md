@@ -129,4 +129,40 @@ gating, fallback and prompt contract are all verified here.
 - Tray icon + overlay rendering (pystray/Pillow) and audio cues are thin device
   adapters; the state→badge logic they render is tested here.
 
-## Phase 4 — Cross-platform hardening (pending)
+## Phase 4 — Cross-platform hardening ✅ (logic + assembly) / device paths deferred to the Mac
+
+**Automated.** 295 tests, **100% line+branch coverage** on all logic. `ruff`,
+`ruff format --check`, `mypy` (strict, 39 files) clean.
+
+**Delivered and tested (logic):**
+- **VAD/continuous capture loop** (`capture.py`): `record_once` (endpoint /
+  stream-end / cancel) and `run_continuous` auto-rearm — the piece deferred from
+  Phase 3 — fully tested with fakes + the real `Endpointer`.
+- **Model benchmark** (`stt/bench.py`, `whisper-flow bench`): orchestration
+  (sort fastest-first, failures last) and table (xRT column, recommendation)
+  tested; the CLI command tested with a real WAV + a fake timer.
+- **Linux injection** (`inject/linux.py`): session-type detection (Wayland/X11),
+  tool preference/selection, and the command injector (argv per tool, Enter
+  handling, failure) — all tested with fakes.
+- **macOS permission guidance** (`permissions.py`) surfaced in `doctor` on
+  Darwin — tested (incl. the `doctor` Darwin path via monkeypatch).
+- **whisper.cpp backend** (`stt/whispercpp.py`) implemented for Apple Silicon.
+- **Daemon hotkey-listener lifecycle**: start/stop wired and tested with a fake
+  listener.
+
+**Manual end-to-end (run here):** the **real `build_daemon`** assembled the full
+app (config → STT → injection chain incl. Linux tool detection → controller →
+IPC → hotkey-listener construction) with only the physical devices faked, and
+drove a dictation over the real socket: `ptt-down` → `recording`, `ptt-up` →
+`injected`, history updated. The detected injector chain was
+`[clipboard, keystrokes, copy_only]`. `bench` rendered a sorted table with a
+recommendation.
+
+**Deferred to the target Mac (needs the hardware):** real microphone capture,
+real whisper.cpp/faster-whisper transcription latency, real global hotkey via
+pynput, real clipboard paste into a focused app, and the tray/overlay/cues
+rendering. The manual check on macOS is: `pipx install
+'whisper-flow-local[dictation,macos]'`, `ollama pull gemma3:4b`, grant the three
+permissions, `whisper-flow start`, then press the hotkey and speak. Every seam
+these exercise is covered by fakes; only the device I/O itself is unverified in
+CI.

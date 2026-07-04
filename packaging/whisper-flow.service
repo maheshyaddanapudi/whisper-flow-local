@@ -1,0 +1,15 @@
+[Unit]
+Description=whisper-flow-local dictation daemon
+Documentation=https://github.com/maheshyaddanapudi/whisper-flow-local
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/whisper-flow start
+Restart=on-failure
+RestartSec=2
+# The daemon keeps audio in RAM; no state needs persisting.
+
+[Install]
+WantedBy=graphical-session.target

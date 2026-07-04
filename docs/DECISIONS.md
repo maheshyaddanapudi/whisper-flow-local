@@ -207,3 +207,43 @@ a mic. The logic they orchestrate is complete and tested.
 
 **Choice.** Ship and test the endpointer + Silero flag now; wire the streaming
 capture/continuous loop in Phase 4 alongside the real `SoundDeviceSource`.
+
+---
+
+## 2026-07-04 — Linux injection: detect at startup, prefer CLI tool, clipboard floor
+
+**Question.** Linux text injection is fragmented (X11 vs Wayland, multiple
+tools). How to choose without hard-failing?
+
+**Findings.** Session type is read from `XDG_SESSION_TYPE` / `WAYLAND_DISPLAY` /
+`DISPLAY`. Wayland prefers `wtype` then `ydotool`; X11 uses `xdotool`. The
+detected tool is inserted into the chain under the "keystrokes" slot so it beats
+pynput where present, and the copy-only floor always remains — so even with no
+tool installed, a dictation lands on the clipboard. Detection runs at startup so
+`doctor` reports the active backend (avoiding the "silent external-binary zoo"
+pitfall). The selection/detection logic is pure and tested; only the subprocess
+call is a seam.
+
+**Choice.** `detect_session_type` → `select_tool` → `CommandInjector` (thin),
+with clipboard/copy-only always behind it.
+
+---
+
+## 2026-07-04 — What Phase 4 verifies in CI vs on the Mac
+
+**Question.** Phase 4 is mostly device I/O. What can honestly be claimed green
+from a headless Linux container?
+
+**Findings.** Everything except the actual hardware calls: the real
+`build_daemon` assembles the whole graph (config → STT selection → injector
+chain with Linux detection → controller → IPC → hotkey-listener construction)
+and, with the three physical devices (mic, STT model, clipboard) faked, drives a
+full dictation over the real socket. `bench`, Linux tool detection, permission
+guidance, and the capture loop are unit-tested. What genuinely cannot be
+exercised here — mic capture, model inference latency, a real global hotkey,
+pasting into a focused app, tray rendering — is listed explicitly in
+VERIFICATION.md with the exact commands to run on macOS.
+
+**Choice.** Claim "logic + assembly verified; device I/O pending on-device",
+never "done". The coverage gate (`--cov-fail-under=100`) plus the fakes-at-seams
+policy make that split precise rather than hand-wavy.

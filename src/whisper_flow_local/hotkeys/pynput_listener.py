@@ -27,8 +27,8 @@ class PynputHotkeyListener:
     def __init__(
         self,
         hotkey: Hotkey,
-        on_press: Callable[[float], None],
-        on_release: Callable[[float], None],
+        on_press: Callable[[float], object],
+        on_release: Callable[[float], object],
         *,
         clock: Callable[[], float] = time.monotonic,
     ) -> None:

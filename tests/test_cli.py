@@ -81,6 +81,49 @@ def test_dict_add_empty_word_errors(capsys, tmp_path) -> None:
     assert "error" in capsys.readouterr().err
 
 
+def test_doctor_shows_macos_permissions(capsys, tmp_path, monkeypatch) -> None:
+    import whisper_flow_local.cli as climod
+
+    monkeypatch.setattr(climod.platform, "system", lambda: "Darwin")
+    assert main(["--config", str(tmp_path / "c.toml"), "doctor"]) == 0
+    out = capsys.readouterr().out
+    assert "macOS permissions" in out
+    assert "Accessibility" in out
+
+
+def test_bench_audio_not_found(capsys, tmp_path) -> None:
+    rc = main(["--config", str(tmp_path / "c.toml"), "bench", "--audio", str(tmp_path / "no.wav")])
+    assert rc == 1
+    assert "not found" in capsys.readouterr().err
+
+
+def _write_wav(path, seconds=1.0, rate=16000) -> None:
+    import struct
+    import wave
+
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(struct.pack("<" + "h" * int(rate * seconds), *([0] * int(rate * seconds))))
+
+
+def test_bench_runs_with_fake_timer(capsys, tmp_path, monkeypatch) -> None:
+    import whisper_flow_local.cli as climod
+
+    wav = tmp_path / "clip.wav"
+    _write_wav(wav, seconds=2.0)
+    # Replace the hardware timer with a deterministic fake.
+    monkeypatch.setattr(climod, "_make_bench_timer", lambda cfg, audio: lambda m: 0.5)
+    rc = main(
+        ["--config", str(tmp_path / "c.toml"), "bench", "--audio", str(wav), "--models", "small.en"]
+    )
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "small.en" in out
+    assert "Recommended" in out
+
+
 def test_invalid_config_returns_2(capsys, tmp_path) -> None:
     p = tmp_path / "bad.toml"
     p.write_text("[hotkey]\nbogus = 1\n", encoding="utf-8")

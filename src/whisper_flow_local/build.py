@@ -8,6 +8,7 @@ tested via :mod:`whisper_flow_local.builder` with fakes.
 
 from __future__ import annotations
 
+import os
 import platform
 
 from .audio_capture import SoundDeviceSource
@@ -23,6 +24,7 @@ from .config import Config
 from .controller import Controller, _Deps
 from .daemon import Daemon
 from .history import History
+from .hotkeys.base import HotkeyListener
 from .inject.base import Injector
 from .inject.clipboard import ClipboardInjector
 from .inject.copyonly import CopyOnlyInjector
@@ -46,14 +48,36 @@ def _build_stt(config: Config) -> STTBackend:
     )
 
 
-def build_daemon(config: Config) -> Daemon:
-    clipboard = SystemClipboard()
+def _build_injectors(clipboard: SystemClipboard) -> dict[str, Injector]:
     injectors: dict[str, Injector] = {
         "clipboard": ClipboardInjector(clipboard, make_paster()),
         "keystrokes": KeystrokeInjector(),
         "copy_only": CopyOnlyInjector(clipboard),
     }
-    chain = build_injection_chain(list(config.get("inject.chain")), injectors)
+    # On Linux, add a detected CLI injector (xdotool/wtype/ydotool) under the
+    # name "keystrokes" so it takes precedence over pynput where available.
+    if platform.system() == "Linux":
+        import shutil
+
+        from .inject.linux import CommandInjector, detect_session_type, select_tool
+
+        tool = select_tool(detect_session_type(os.environ), shutil.which)
+        if tool is not None:
+            injectors["keystrokes"] = CommandInjector(tool)
+    return injectors
+
+
+def _build_hotkey_listener(config: Config, controller: Controller) -> HotkeyListener:
+    from .hotkeys.base import parse_hotkey
+    from .hotkeys.pynput_listener import PynputHotkeyListener
+
+    hotkey = parse_hotkey(str(config.get("hotkey.primary")))
+    return PynputHotkeyListener(hotkey, controller.on_hotkey_press, controller.on_hotkey_release)
+
+
+def build_daemon(config: Config) -> Daemon:
+    clipboard = SystemClipboard()
+    chain = build_injection_chain(list(config.get("inject.chain")), _build_injectors(clipboard))
     audio = SoundDeviceSource(int(config.get("audio.sample_rate")), str(config.get("audio.device")))
     engine = build_cleanup_engine(config)
     dictionary = build_dictionary(config)
@@ -66,4 +90,7 @@ def build_daemon(config: Config) -> Daemon:
         replace=build_replacement(dictionary),
     )
     controller = Controller(build_controller_config(config, dictionary), deps)
-    return Daemon(controller, default_socket_path())
+    listener = None
+    if str(config.get("hotkey.backend")) != "none":
+        listener = _build_hotkey_listener(config, controller)
+    return Daemon(controller, default_socket_path(), hotkey_listener=listener)
