@@ -7,6 +7,8 @@ tested with fakes, while the daemon only supplies real adapters and threads.
 
 from __future__ import annotations
 
+from .cleanup.engine import CleanupEngine
+from .cleanup.prompts import CleanupGoals
 from .config import Config
 from .controller import ControllerConfig
 from .inject.base import InjectionChain, Injector
@@ -37,6 +39,28 @@ def build_injection_chain(names: list[str], injectors: dict[str, Injector]) -> I
     if "copy_only" in injectors and "copy_only" not in seen:
         ordered.append(injectors["copy_only"])
     return InjectionChain(ordered)
+
+
+def build_cleanup_engine(config: Config) -> CleanupEngine | None:
+    """Build the Ollama cleanup engine, or None if cleanup is disabled."""
+    if not bool(config.get("cleanup.enabled")):
+        return None
+    goals = CleanupGoals(
+        punctuation=bool(config.get("cleanup.goal_punctuation")),
+        grammar=bool(config.get("cleanup.goal_grammar")),
+        fillers=bool(config.get("cleanup.goal_fillers")),
+        stutters=bool(config.get("cleanup.goal_stutters")),
+        lists=bool(config.get("cleanup.goal_lists")),
+    )
+    return CleanupEngine(
+        host=str(config.get("cleanup.ollama_host")),
+        model=str(config.get("cleanup.model")),
+        goals=goals,
+        prompt_override=str(config.get("cleanup.prompt_override")),
+        keep_alive=str(config.get("cleanup.keep_alive")),
+        timeout=float(config.get("cleanup.timeout_seconds")),
+        max_growth_ratio=float(config.get("cleanup.max_growth_ratio")),
+    )
 
 
 def build_controller_config(config: Config) -> ControllerConfig:

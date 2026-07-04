@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from fakes import FakeInjector
 from whisper_flow_local.builder import (
+    build_cleanup_engine,
     build_controller_config,
     build_injection_chain,
     resolve_stt_backend_name,
@@ -54,6 +55,31 @@ def test_build_chain_without_copyonly_available() -> None:
     injectors = {"clipboard": FakeInjector("clipboard")}
     chain = build_injection_chain(["clipboard"], injectors)
     assert [b.name for b in chain.backends] == ["clipboard"]
+
+
+def test_build_cleanup_engine_enabled() -> None:
+    engine = build_cleanup_engine(Config())
+    assert engine is not None
+    assert "transcript cleaner" in engine.system_prompt.lower()
+
+
+def test_build_cleanup_engine_disabled() -> None:
+    cfg = Config()
+    cfg.data["cleanup"]["enabled"] = False
+    assert build_cleanup_engine(cfg) is None
+
+
+def test_build_cleanup_engine_respects_goals() -> None:
+    cfg = Config()
+    cfg.data["cleanup"]["goal_fillers"] = False
+    cfg.data["cleanup"]["goal_grammar"] = False
+    cfg.data["cleanup"]["goal_stutters"] = False
+    cfg.data["cleanup"]["goal_lists"] = False
+    engine = build_cleanup_engine(cfg)
+    assert engine is not None
+    # only punctuation goal remains
+    assert "punctuation" in engine.system_prompt.lower()
+    assert "filler" not in engine.system_prompt.lower()
 
 
 def test_build_controller_config_maps_fields() -> None:

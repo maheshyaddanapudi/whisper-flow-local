@@ -29,11 +29,11 @@ def make_dispatch(controller: Controller) -> Dispatch:
         if verb == "status":
             return controller.status()
         if verb == "toggle":
-            return asdict(controller.toggle())
+            return asdict(controller.toggle(clean=bool(args.get("clean", True))))
         if verb == "ptt-down":
             return asdict(controller.ptt_down())
         if verb == "ptt-up":
-            return asdict(controller.ptt_up())
+            return asdict(controller.ptt_up(clean=bool(args.get("clean", True))))
         if verb == "cancel":
             return asdict(controller.cancel())
         if verb == "paste-last":

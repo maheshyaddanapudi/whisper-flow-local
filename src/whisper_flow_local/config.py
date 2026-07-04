@@ -245,6 +245,15 @@ SCHEMA: tuple[Option, ...] = (
         "",
         "Custom cleanup system prompt; empty uses the compiled default.",
     ),
+    Option(
+        "cleanup.max_growth_ratio",
+        "float",
+        2.5,
+        "Safety net: if cleaned text is longer than this ratio of the raw "
+        "(a model that answered/expanded instead of cleaning), inject raw instead.",
+        minimum=1.0,
+        maximum=100.0,
+    ),
     # [inject]
     Option(
         "inject.chain",

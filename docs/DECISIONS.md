@@ -125,3 +125,46 @@ documented.
 
 **Choice.** Poll-verify before paste; bounded, configurable restore delay after.
 Both seams (clipboard, paste, clock, sleep) injected for 100% test coverage.
+
+---
+
+## 2026-07-04 — Cleanup safety: prompt guardrail + output growth guard
+
+**Question.** The cleanup LLM must "clean, never transform meaning". A strict
+prompt helps, but small models sometimes still answer a dictated question or
+expand the text. Can we defend beyond the prompt without hurting real cleanup?
+
+**Findings.** The dangerous failure is *growth*: the model answers/expands, so
+the output is much longer than the input. Legitimate cleanup mostly *shrinks*
+(filler removal) or stays similar length — so a lower bound on length would
+wrongly reject heavy-filler dictations, but an **upper bound on growth** is
+safe. If cleaned length exceeds `max_growth_ratio × len(raw) + allowance`, we
+treat it as "the model didn't clean, it responded" and fall back to raw. A small
+additive allowance (40 chars) lets short inputs gain punctuation/capitalization
+without tripping the guard.
+
+**Choice.** Two layers: (1) the always-present plain-text guardrail in the
+system prompt (no XML — small models misread tags); (2) an output growth guard
+in the engine (`cleanup.max_growth_ratio`, default 2.5). Deliberately *no* lower
+bound — shrink from filler removal is expected and kept. Both are covered by the
+adversarial test suite.
+
+**Sources.** TRAITS.md pitfalls (XML prompts misread by small models; "never
+transform meaning" contract). API shape from the Ollama `/api/chat` docs.
+
+---
+
+## 2026-07-04 — Raw-vs-cleaned intent: a `clean` flag, not a second pipeline
+
+**Question.** TRAITS.md wants a second hotkey for "raw transcribe" vs
+"transcribe + cleanup" (Handy). How to model it without duplicating the pipeline?
+
+**Findings.** The only difference is whether the cleanup stage runs. Threading a
+`clean: bool` through the trigger methods (`toggle`/`ptt_up` →
+`_stop_and_process`) keeps one pipeline. The daemon exposes it as an IPC arg
+(`{"clean": false}`) and the CLI as `--raw`, so a second physical hotkey (bound
+to a compositor key or hotkey manager) invokes `whisper-flow --raw ptt-up`. Real
+dual-hotkey wiring in-process lands with the real hotkey backend (Phase 4).
+
+**Choice.** `clean` flag on triggers; `--raw` CLI flag; IPC `clean` arg. Default
+is clean=true (cleanup is the headline feature).

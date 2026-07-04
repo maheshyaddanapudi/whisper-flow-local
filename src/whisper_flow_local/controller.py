@@ -98,12 +98,12 @@ class Controller:
             return self._apply_intent(self._resolver.release(now))
 
     # --- IPC/scripting path ----------------------------------------------
-    def toggle(self) -> DictationResult:
+    def toggle(self, *, clean: bool = True) -> DictationResult:
         with self._lock:
             if self._sm.state == State.IDLE:
                 return self._start()
             if self._sm.state == State.RECORDING:
-                return self._stop_and_process()
+                return self._stop_and_process(clean=clean)
             return DictationResult(status="busy", reason=self._sm.state.value)
 
     def ptt_down(self) -> DictationResult:
@@ -112,10 +112,10 @@ class Controller:
                 return self._start()
             return DictationResult(status="busy", reason=self._sm.state.value)
 
-    def ptt_up(self) -> DictationResult:
+    def ptt_up(self, *, clean: bool = True) -> DictationResult:
         with self._lock:
             if self._sm.state == State.RECORDING:
-                return self._stop_and_process()
+                return self._stop_and_process(clean=clean)
             return DictationResult(status="noop")
 
     def cancel(self) -> DictationResult:
@@ -147,11 +147,11 @@ class Controller:
             )
 
     # --- pipeline ---------------------------------------------------------
-    def _apply_intent(self, intent: Intent) -> DictationResult:
+    def _apply_intent(self, intent: Intent, *, clean: bool = True) -> DictationResult:
         if intent == Intent.START and self._sm.state == State.IDLE:
             return self._start()
         if intent == Intent.STOP and self._sm.state == State.RECORDING:
-            return self._stop_and_process()
+            return self._stop_and_process(clean=clean)
         return DictationResult(status="noop")
 
     def _start(self) -> DictationResult:
@@ -161,7 +161,7 @@ class Controller:
         self._d.audio.start()
         return DictationResult(status="started")
 
-    def _stop_and_process(self) -> DictationResult:
+    def _stop_and_process(self, *, clean: bool = True) -> DictationResult:
         buffer = self._d.audio.stop()
         self._fire("stop")
         if buffer.duration_s < self._cfg.min_duration_s:
@@ -188,7 +188,7 @@ class Controller:
             self._to_idle()
             return DictationResult(status="empty")
 
-        cleaned = self._run_cleanup(raw)
+        cleaned = self._run_cleanup(raw) if clean else ""
         return self._finish_inject(cleaned or raw, raw, cleaned)
 
     def _run_cleanup(self, raw: str) -> str:

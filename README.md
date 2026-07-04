@@ -10,11 +10,12 @@ It's an original, MIT-licensed take on Wispr Flow / Superwhisper. Unlike Wispr
 Flow — whose transcription [always happens in the cloud](docs/RESEARCH.md) — this
 never sends your voice off the machine.
 
-> **Status: under active construction.** Phases 0–1 are complete and tested: the
-> daemon, the hotkey→record→transcribe→inject loop, the IPC/CLI control verbs,
-> and clipboard-paste injection with snapshot/restore. The Ollama cleanup pass
-> (Phase 2) and two-layer VAD, dictionary, and tray (Phase 3) are next. See
-> [docs/PLAN.md](docs/PLAN.md) for the roadmap and
+> **Status: under active construction.** Phases 0–2 are complete and tested: the
+> daemon, the hotkey→record→transcribe→**Ollama cleanup**→inject loop, the
+> IPC/CLI control verbs, clipboard-paste injection with snapshot/restore, and the
+> LLM cleanup pass (filler removal, punctuation) with a raw-transcript fallback
+> if Ollama is unavailable. Two-layer VAD, dictionary, and tray (Phase 3) are
+> next. See [docs/PLAN.md](docs/PLAN.md) for the roadmap and
 > [docs/VERIFICATION.md](docs/VERIFICATION.md) for exactly what's verified.
 
 ## Install
@@ -69,7 +70,18 @@ whisper-flow cancel          # abort the current dictation
 whisper-flow status          # JSON: current state, history size, last text
 whisper-flow paste-last      # re-paste the last dictation
 whisper-flow paste-last-raw  # re-paste it without cleanup
+whisper-flow --raw toggle    # dictate but skip LLM cleanup this time
 ```
+
+### Cleanup (the Ollama pass)
+
+After transcription, the text goes through a local LLM (default `gemma3:4b` via
+Ollama) that removes filler words, fixes punctuation and capitalization, and
+applies self-corrections — configurable per goal in `[cleanup]`. It's on by
+default and **never blocks a dictation**: if Ollama is down, slow, or the model
+"answers" instead of cleaning (caught by a length guard), the raw transcript is
+injected instead. Skip it per-utterance with `--raw`, or disable it with
+`cleanup.enabled = false`.
 
 `doctor` tells you which mode you get: **full** (hotkey dictation with direct
 text injection), **copy-only** (text placed on the clipboard — ideal for

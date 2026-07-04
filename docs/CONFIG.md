@@ -33,6 +33,7 @@ _Generated from the config schema — do not edit by hand._
 | `cleanup.goal_stutters` | bool | `true` |  | Collapse stutters and self-corrections. |
 | `cleanup.goal_lists` | bool | `true` |  | Format dictated lists. |
 | `cleanup.prompt_override` | str | `""` |  | Custom cleanup system prompt; empty uses the compiled default. |
+| `cleanup.max_growth_ratio` | float | `2.5` |  | Safety net: if cleaned text is longer than this ratio of the raw (a model that answered/expanded instead of cleaning), inject raw instead. |
 | `inject.chain` | list[str] | `["clipboard", "keystrokes", "copy_only"]` |  | Ordered injection backends to try, first that works wins. |
 | `inject.auto_submit` | bool | `false` |  | Press Enter after injecting (off by default; never surprise the user). |
 | `inject.trailing_space` | bool | `false` |  | Append a trailing space after injected text. |

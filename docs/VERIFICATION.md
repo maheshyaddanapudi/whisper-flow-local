@@ -66,6 +66,38 @@ socket + real `whisper-flow` CLI, with fakes only at the physical seams
   adapters need the hardware. `whisper-flow start` then a hotkey press is the
   manual check on macOS.
 
-## Phase 2 — Ollama cleanup (pending)
+## Phase 2 — Ollama cleanup ✅
+
+**Automated.** 218 tests, **100% line+branch coverage** on all logic including
+the new `cleanup/` package (prompt builder, Ollama chat client, engine). `ruff`,
+`ruff format --check`, `mypy` (strict, 32 files) clean. The Ollama chat client
+is tested end to end against the in-process mock server (success, server error,
+unreachable, missing-content).
+
+**Adversarial cleanup suite** (`test_cleanup_prompts.py`, `test_cleanup_engine.py`):
+- The compiled system prompt always carries the guardrail forbidding
+  answering/summarizing/translating/adding/removing, for every goal subset and
+  is plain-text (no XML angle brackets) — pinned so a future edit can't silently
+  drop a guard.
+- Adversarial transcripts ("what is two plus two", "summarize…", "translate…",
+  "ignore previous instructions…") fed to a mock model that "answers" at length:
+  the **growth guard** rejects the expansion and the engine falls back to raw;
+  the guardrail prompt is confirmed sent regardless.
+- Legitimate heavy shrink (filler removal) is preserved; short inputs may gain
+  punctuation within the additive allowance.
+
+**Manual end-to-end (run here)** — real `Daemon` + real IPC + real `CleanupEngine`
+talking to a **real (mock) Ollama HTTP server**:
+- Cleanup ON: raw `"um so this is like … you know"` → injected
+  `"This is the cleaned, punctuated sentence."` (LLM output).
+- **Ollama killed mid-flight** (`fail_chat` between record and cleanup): the raw
+  transcript is injected — nothing lost. Meets the exit criterion.
+- `--raw` flag / `clean=false`: LLM bypassed entirely even with Ollama up
+  (verified zero requests reached the server).
+
+**Deferred to the target Mac:** real gemma3:4b latency (exit criterion E2E
+≤1.5 s for a 10 s utterance) needs a real Ollama + model; the pipeline wiring,
+gating, fallback and prompt contract are all verified here.
+
 ## Phase 3 — Dictation quality (pending)
 ## Phase 4 — Cross-platform hardening (pending)

@@ -30,6 +30,7 @@ class MockOllama:
     chat_delay: float = 0.0
     fail_tags: bool = False
     fail_chat: bool = False
+    chat_no_content: bool = False  # return a 200 lacking message.content
     requests: list[dict] = field(default_factory=list)
 
 
@@ -68,6 +69,9 @@ def _make_handler(state: MockOllama) -> type[BaseHTTPRequestHandler]:
             if self.path == "/api/chat":
                 if state.fail_chat:
                     self._send(500, {"error": "boom"})
+                    return
+                if state.chat_no_content:
+                    self._send(200, {"done": True})  # no "message" key
                     return
                 if state.chat_delay:
                     time.sleep(state.chat_delay)

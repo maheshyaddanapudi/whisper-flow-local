@@ -47,6 +47,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to the daemon IPC socket (default: runtime dir).",
     )
+    parser.add_argument(
+        "--raw",
+        action="store_true",
+        help="For toggle/ptt-up: inject the raw transcript, skipping LLM cleanup.",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="Report available STT/Ollama/injection/hotkey capabilities.")
@@ -112,8 +117,9 @@ def _resolve_socket_path(args: argparse.Namespace) -> Path:
 def _cmd_send(args: argparse.Namespace) -> int:
     from .ipc import IPCError, send
 
+    verb_args = {"clean": False} if args.raw else {}
     try:
-        resp = send(_resolve_socket_path(args), args.command)
+        resp = send(_resolve_socket_path(args), args.command, verb_args)
     except IPCError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

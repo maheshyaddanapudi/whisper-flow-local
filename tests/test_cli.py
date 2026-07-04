@@ -90,6 +90,25 @@ def test_control_verb_no_daemon_errors(capsys, tmp_path) -> None:
     assert "error" in capsys.readouterr().err
 
 
+def test_raw_flag_sends_clean_false(tmp_path) -> None:
+    from whisper_flow_local.ipc import IPCServer
+
+    seen: list = []
+
+    def dispatch(verb: str, args: dict) -> dict:
+        seen.append((verb, args))
+        return {"status": "injected"}
+
+    sock = tmp_path / "wf.sock"
+    server = IPCServer(sock, dispatch)
+    server.start()
+    try:
+        assert main(["--socket", str(sock), "--raw", "toggle"]) == 0
+        assert seen == [("toggle", {"clean": False})]
+    finally:
+        server.stop()
+
+
 def test_start_builds_and_runs_daemon(capsys, tmp_path, monkeypatch) -> None:
     import whisper_flow_local.build as build_mod
 

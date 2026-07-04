@@ -59,3 +59,49 @@ def has_model(status: OllamaStatus, model: str) -> bool:
     if ":" not in model:
         wanted.add(model + ":latest")
     return any(name in wanted or name.split(":")[0] == model for name in status.models)
+
+
+class OllamaError(RuntimeError):
+    """Raised when a chat request to Ollama fails or times out."""
+
+
+def chat(
+    host: str,
+    model: str,
+    system: str,
+    user: str,
+    *,
+    keep_alive: str = "30m",
+    timeout: float = 8.0,
+    temperature: float = 0.0,
+) -> str:
+    """Non-streaming ``POST /api/chat`` returning the assistant's text.
+
+    Raises :class:`OllamaError` on any transport, HTTP, or decode failure (the
+    caller falls back to the raw transcript — cleanup never gates).
+    """
+    url = host.rstrip("/") + "/api/chat"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "stream": False,
+        "keep_alive": keep_alive,
+        "options": {"temperature": temperature},
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise OllamaError(f"ollama chat failed: {exc}") from exc
+    message = body.get("message") if isinstance(body, dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, str):
+        raise OllamaError("ollama chat returned no message content")
+    return content
