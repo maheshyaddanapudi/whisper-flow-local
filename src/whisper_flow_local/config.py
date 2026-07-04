@@ -12,6 +12,7 @@ any environment even before the optional hardware extras are installed.
 
 from __future__ import annotations
 
+import os
 import tomllib
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
@@ -20,6 +21,11 @@ from typing import Any, Literal
 
 CONFIG_VERSION = 1
 """Bumped when a migration is needed; written into every config file."""
+
+ENV_PREFIX = "WHISPER_FLOW_"
+"""Any setting can be overridden by ``WHISPER_FLOW_<SECTION>_<NAME>`` in the
+environment, e.g. ``WHISPER_FLOW_CLEANUP_MODEL``. Precedence: env > file >
+default."""
 
 OptionType = Literal["bool", "int", "float", "str", "list[str]"]
 
@@ -387,15 +393,65 @@ def _validate(raw: Mapping[str, Any]) -> dict[str, Any]:
     return result
 
 
-def load(path: Path | None = None) -> Config:
-    """Load config from ``path`` (or return pure defaults if it does not exist)."""
+def env_var_name(key: str) -> str:
+    """The environment variable that overrides a config ``key``.
+
+    ``cleanup.model`` -> ``WHISPER_FLOW_CLEANUP_MODEL``. Because the mapping is
+    generated per known key, section/name underscores are never ambiguous.
+    """
+    return ENV_PREFIX + key.replace(".", "_").upper()
+
+
+def _parse_env_value(opt: Option, raw: str) -> Any:
+    """Coerce an environment-variable string to the option's type."""
+    if opt.type == "bool":
+        lowered = raw.strip().lower()
+        if lowered in ("1", "true", "yes", "on"):
+            return True
+        if lowered in ("0", "false", "no", "off"):
+            return False
+        raise ConfigError(f"{env_var_name(opt.key)}: expected a boolean, got {raw!r}")
+    if opt.type == "int":
+        try:
+            return int(raw)
+        except ValueError as exc:
+            raise ConfigError(f"{env_var_name(opt.key)}: expected an integer, got {raw!r}") from exc
+    if opt.type == "float":
+        try:
+            return float(raw)
+        except ValueError as exc:
+            raise ConfigError(f"{env_var_name(opt.key)}: expected a number, got {raw!r}") from exc
+    if opt.type == "list[str]":
+        return [item.strip() for item in raw.split(",") if item.strip()]
+    return raw  # str
+
+
+def apply_env_overrides(data: dict[str, Any], environ: Mapping[str, str]) -> dict[str, Any]:
+    """Override config values from ``WHISPER_FLOW_*`` environment variables."""
+    for opt in SCHEMA:
+        raw = environ.get(env_var_name(opt.key))
+        if raw is None:
+            continue
+        section, name = opt.key.split(".", 1)
+        data[section][name] = opt.validate(_parse_env_value(opt, raw))
+    return data
+
+
+def load(path: Path | None = None, environ: Mapping[str, str] | None = None) -> Config:
+    """Load config from ``path``, then apply ``WHISPER_FLOW_*`` env overrides.
+
+    Precedence: environment variables > config file > schema defaults.
+    """
+    environ = os.environ if environ is None else environ
     if path is None or not path.exists():
-        return Config()
-    try:
-        raw = tomllib.loads(path.read_text(encoding="utf-8"))
-    except tomllib.TOMLDecodeError as exc:
-        raise ConfigError(f"{path}: invalid TOML: {exc}") from exc
-    return Config(_validate(raw))
+        data = defaults()
+    else:
+        try:
+            raw = tomllib.loads(path.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError as exc:
+            raise ConfigError(f"{path}: invalid TOML: {exc}") from exc
+        data = _validate(raw)
+    return Config(apply_env_overrides(data, environ))
 
 
 def default_config_path() -> Path:
@@ -449,13 +505,21 @@ def generate_docs() -> str:
         "",
         "_Generated from the config schema — do not edit by hand._",
         "",
-        "| Key | Type | Default | Choices | Description |",
-        "| --- | --- | --- | --- | --- |",
+        "Settings live in `~/.config/whisper-flow/config.toml`. Any option can be",
+        "overridden by an environment variable named `WHISPER_FLOW_<SECTION>_<NAME>`",
+        "(e.g. `cleanup.model` -> `WHISPER_FLOW_CLEANUP_MODEL`). Precedence:",
+        "environment variable > config file > default.",
+        "",
+        "| Key | Env var | Type | Default | Choices | Description |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for opt in SCHEMA:
         choices = ", ".join(str(c) for c in opt.choices) if opt.choices else ""
         default = _toml_scalar(opt.default)
-        lines.append(f"| `{opt.key}` | {opt.type} | `{default}` | {choices} | {opt.description} |")
+        env = env_var_name(opt.key)
+        lines.append(
+            f"| `{opt.key}` | `{env}` | {opt.type} | `{default}` | {choices} | {opt.description} |"
+        )
     return "\n".join(lines) + "\n"
 
 

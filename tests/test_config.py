@@ -193,8 +193,9 @@ def test_dumps_escapes_quotes() -> None:
 
 def test_generate_docs_table() -> None:
     docs = generate_docs()
-    assert "| Key | Type | Default | Choices | Description |" in docs
+    assert "| Key | Env var | Type | Default | Choices | Description |" in docs
     assert "`hotkey.primary`" in docs
+    assert "`WHISPER_FLOW_HOTKEY_PRIMARY`" in docs  # env var column
     assert "hybrid" in docs  # a choices cell
 
 
@@ -214,3 +215,89 @@ def test_toml_scalar_number_passthrough() -> None:
     # ints/floats render bare
     assert cfgmod._toml_scalar(5) == "5"
     assert cfgmod._toml_scalar(1.5) == "1.5"
+
+
+# --- environment-variable overrides ------------------------------------------
+
+
+def test_env_var_name() -> None:
+    assert cfgmod.env_var_name("cleanup.model") == "WHISPER_FLOW_CLEANUP_MODEL"
+    assert (
+        cfgmod.env_var_name("hotkey.hold_threshold_ms") == "WHISPER_FLOW_HOTKEY_HOLD_THRESHOLD_MS"
+    )
+
+
+def test_env_overrides_string(monkeypatch, tmp_path) -> None:
+    monkeypatch.setenv("WHISPER_FLOW_CLEANUP_MODEL", "gemma2:27b")
+    cfg = load(tmp_path / "absent.toml")
+    assert cfg.get("cleanup.model") == "gemma2:27b"
+
+
+def test_env_overrides_beat_file(tmp_path, monkeypatch) -> None:
+    path = tmp_path / "config.toml"
+    path.write_text('[cleanup]\nmodel = "from-file"\n', encoding="utf-8")
+    # file value first
+    assert load(path, environ={}).get("cleanup.model") == "from-file"
+    # env wins over file
+    monkeypatch.setenv("WHISPER_FLOW_CLEANUP_MODEL", "from-env")
+    assert load(path).get("cleanup.model") == "from-env"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("true", True),
+        ("1", True),
+        ("yes", True),
+        ("on", True),
+        ("false", False),
+        ("0", False),
+        ("no", False),
+        ("off", False),
+    ],
+)
+def test_env_parses_bool(raw: str, expected: bool) -> None:
+    cfg = load(None, environ={"WHISPER_FLOW_CLEANUP_ENABLED": raw})
+    assert cfg.get("cleanup.enabled") is expected
+
+
+def test_env_parses_int_and_float() -> None:
+    cfg = load(
+        None,
+        environ={
+            "WHISPER_FLOW_CLEANUP_MIN_CHARS": "25",
+            "WHISPER_FLOW_CLEANUP_TIMEOUT_SECONDS": "12.5",
+        },
+    )
+    assert cfg.get("cleanup.min_chars") == 25
+    assert cfg.get("cleanup.timeout_seconds") == 12.5
+
+
+def test_env_parses_list() -> None:
+    cfg = load(None, environ={"WHISPER_FLOW_INJECT_CHAIN": "clipboard, copy_only"})
+    assert cfg.get("inject.chain") == ["clipboard", "copy_only"]
+
+
+def test_env_invalid_bool_raises() -> None:
+    with pytest.raises(ConfigError, match="boolean"):
+        load(None, environ={"WHISPER_FLOW_CLEANUP_ENABLED": "maybe"})
+
+
+def test_env_invalid_int_raises() -> None:
+    with pytest.raises(ConfigError, match="integer"):
+        load(None, environ={"WHISPER_FLOW_CLEANUP_MIN_CHARS": "lots"})
+
+
+def test_env_invalid_float_raises() -> None:
+    with pytest.raises(ConfigError, match="number"):
+        load(None, environ={"WHISPER_FLOW_CLEANUP_TIMEOUT_SECONDS": "soon"})
+
+
+def test_env_still_validated_against_choices() -> None:
+    with pytest.raises(ConfigError):
+        load(None, environ={"WHISPER_FLOW_HOTKEY_MODE": "nonsense"})
+
+
+def test_env_ignores_unrelated_vars() -> None:
+    cfg = load(None, environ={"PATH": "/usr/bin", "WHISPER_FLOW_NOT_A_KEY": "x"})
+    assert cfg.get("cleanup.model") == "gemma3:4b"  # unchanged default

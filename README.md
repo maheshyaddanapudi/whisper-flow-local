@@ -114,7 +114,25 @@ these controls.
 
 All settings live in one file (`~/.config/whisper-flow/config.toml`) generated
 from a schema. Full reference: [docs/CONFIG.md](docs/CONFIG.md) (auto-generated —
-regenerate with `whisper-flow gen-docs`).
+regenerate with `whisper-flow gen-docs`). For example, to point cleanup at a
+different Ollama model:
+
+```toml
+[cleanup]
+model = "gemma2:27b"    # must match a name from `ollama list`
+```
+
+**Environment overrides.** Any option can be overridden by an environment
+variable named `WHISPER_FLOW_<SECTION>_<NAME>`, which wins over the file and the
+default — handy for per-shell tweaks, containers, or secrets:
+
+```bash
+WHISPER_FLOW_CLEANUP_MODEL=gemma2:27b whisper-flow start
+WHISPER_FLOW_CLEANUP_ENABLED=false whisper-flow toggle   # dictate without cleanup
+```
+
+Precedence is **env var > config file > default**. `whisper-flow doctor` reflects
+the effective values, so it'll tell you if an env-overridden model isn't pulled.
 
 ## Privacy
 
