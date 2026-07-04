@@ -9,12 +9,24 @@ daemon over the IPC socket.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from collections.abc import Sequence
 from pathlib import Path
 
 from . import __version__
 from .config import Config, ConfigError, default_config_path, dumps, generate_docs, load
+
+# Daemon control verbs forwarded over IPC.
+_CONTROL_VERBS = (
+    "toggle",
+    "ptt-down",
+    "ptt-up",
+    "cancel",
+    "status",
+    "paste-last",
+    "paste-last-raw",
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -29,6 +41,12 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Path to config.toml (default: ~/.config/whisper-flow/config.toml).",
     )
+    parser.add_argument(
+        "--socket",
+        type=Path,
+        default=None,
+        help="Path to the daemon IPC socket (default: runtime dir).",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="Report available STT/Ollama/injection/hotkey capabilities.")
@@ -41,6 +59,10 @@ def _build_parser() -> argparse.ArgumentParser:
     init.add_argument("--force", action="store_true", help="Overwrite an existing file.")
 
     sub.add_parser("gen-docs", help="Print the config reference (Markdown) to stdout.")
+
+    sub.add_parser("start", help="Run the dictation daemon (foreground).")
+    for verb in _CONTROL_VERBS:
+        sub.add_parser(verb, help=f"Send '{verb}' to the running daemon.")
 
     return parser
 
@@ -80,6 +102,37 @@ def _cmd_gen_docs() -> int:
     return 0
 
 
+def _resolve_socket_path(args: argparse.Namespace) -> Path:
+    from .ipc import default_socket_path
+
+    result: Path = args.socket if args.socket is not None else default_socket_path()
+    return result
+
+
+def _cmd_send(args: argparse.Namespace) -> int:
+    from .ipc import IPCError, send
+
+    try:
+        resp = send(_resolve_socket_path(args), args.command)
+    except IPCError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if resp.get("ok"):
+        print(json.dumps(resp.get("data", {})))
+        return 0
+    print(f"error: {resp.get('error', 'unknown')}", file=sys.stderr)
+    return 1
+
+
+def _cmd_start(config: Config, args: argparse.Namespace) -> int:
+    from .build import build_daemon
+
+    daemon = build_daemon(config)
+    print(f"whisper-flow daemon listening on {daemon._server.path}")
+    daemon.run()
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
     parser = _build_parser()
@@ -98,6 +151,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_config(args, config, path)
     if args.command == "gen-docs":
         return _cmd_gen_docs()
+    if args.command == "start":
+        return _cmd_start(config, args)
+    if args.command in _CONTROL_VERBS:
+        return _cmd_send(args)
     return 1  # pragma: no cover - argparse enforces a valid command
 
 

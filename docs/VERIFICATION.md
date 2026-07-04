@@ -35,7 +35,37 @@ all Phase-0 modules (config, cli, deps, cleanup/ollama). `ruff check`,
 
 ---
 
-## Phase 1 — Core loop MVP (pending)
+## Phase 1 — Core loop MVP ✅
+
+**Automated.** 177 tests, **100% line+branch coverage** on all logic modules
+(state machine, recording resolver, history, IPC protocol + socket transport,
+injection chain + clipboard/copy-only, controller orchestration, builder,
+daemon dispatch, hotkey parser, CLI). `ruff`, `ruff format --check`, and `mypy`
+(strict, 30 files) all clean. Coverage-excluded modules are the thin device
+adapters only (audio_capture, fasterwhisper, whispercpp, inject/system,
+pynput_listener, build), justified in `tests/README.md`.
+
+**Manual end-to-end (run in this environment)** — a real `Daemon` + real Unix
+socket + real `whisper-flow` CLI, with fakes only at the physical seams
+(mic/STT/clipboard/paste):
+- `ptt-down` → state becomes `recording`.
+- `ptt-up` → pipeline runs record → transcribe → **clipboard-paste injection**
+  (backend `clipboard`), text delivered.
+- **Clipboard snapshot/restore verified**: the user's prior clipboard
+  (`USER-CLIPBOARD`) is intact after the paste; exactly one paste keystroke was
+  sent; **no Enter** was sent (auto-submit off by default).
+- `status` reports `idle`, `history_size: 1`, the last text.
+- `paste-last` replays the dictation; `cancel` from idle is a clean `noop`.
+- Single-instance guard, stale-socket reclaim, and handler-error reporting all
+  verified over the real socket.
+
+**Deferred to the target Mac (cannot verify here — no mic/display/Ollama):**
+- Real microphone capture (sounddevice), real faster-whisper transcription
+  latency (<1 s/sentence target), real global hotkey (pynput), and real
+  clipboard/paste into a focused app. The seams are exercised with fakes; the
+  adapters need the hardware. `whisper-flow start` then a hotkey press is the
+  manual check on macOS.
+
 ## Phase 2 — Ollama cleanup (pending)
 ## Phase 3 — Dictation quality (pending)
 ## Phase 4 — Cross-platform hardening (pending)

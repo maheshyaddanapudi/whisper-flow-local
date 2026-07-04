@@ -104,8 +104,15 @@ addopts = "-q"
 branch = true
 source = ["whisper_flow_local"]
 omit = [
-    # Thin hardware adapters are covered by fakes at the interface seam, not
-    # by importing the real device libraries; see tests/README for the policy.
+    # Thin hardware/device adapters: covered by fakes at the interface seam,
+    # not by importing real device libraries (absent in CI). Logic lives on the
+    # tested side of each seam. See tests/README.md for the policy.
+    "src/whisper_flow_local/audio_capture.py",
+    "src/whisper_flow_local/stt/fasterwhisper.py",
+    "src/whisper_flow_local/stt/whispercpp.py",
+    "src/whisper_flow_local/inject/system.py",
+    "src/whisper_flow_local/hotkeys/pynput_listener.py",
+    "src/whisper_flow_local/build.py",
 ]
 
 [tool.coverage.report]

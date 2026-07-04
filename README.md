@@ -10,10 +10,12 @@ It's an original, MIT-licensed take on Wispr Flow / Superwhisper. Unlike Wispr
 Flow — whose transcription [always happens in the cloud](docs/RESEARCH.md) — this
 never sends your voice off the machine.
 
-> **Status: under active construction.** Phase 0 (scaffold, config, CLI,
-> environment doctor) is complete and tested. The end-to-end hotkey→dictation
-> loop lands in Phase 1. See [docs/PLAN.md](docs/PLAN.md) for the roadmap and
-> [docs/VERIFICATION.md](docs/VERIFICATION.md) for what's verified so far.
+> **Status: under active construction.** Phases 0–1 are complete and tested: the
+> daemon, the hotkey→record→transcribe→inject loop, the IPC/CLI control verbs,
+> and clipboard-paste injection with snapshot/restore. The Ollama cleanup pass
+> (Phase 2) and two-layer VAD, dictionary, and tray (Phase 3) are next. See
+> [docs/PLAN.md](docs/PLAN.md) for the roadmap and
+> [docs/VERIFICATION.md](docs/VERIFICATION.md) for exactly what's verified.
 
 ## Install
 
@@ -48,6 +50,25 @@ ollama pull gemma3:4b
 
 # 3. Write a config file you can edit:
 whisper-flow config init
+
+# 4. Run the daemon (foreground), then press your hotkey and speak:
+whisper-flow start
+```
+
+### Driving the daemon
+
+The daemon listens on a local socket, so you can trigger it from a hotkey
+manager, a Wayland compositor keybind, or a script — not just the built-in
+global hotkey:
+
+```bash
+whisper-flow toggle          # start, or stop-and-transcribe
+whisper-flow ptt-down        # begin push-to-talk (bind to key press)
+whisper-flow ptt-up          # end push-to-talk (bind to key release)
+whisper-flow cancel          # abort the current dictation
+whisper-flow status          # JSON: current state, history size, last text
+whisper-flow paste-last      # re-paste the last dictation
+whisper-flow paste-last-raw  # re-paste it without cleanup
 ```
 
 `doctor` tells you which mode you get: **full** (hotkey dictation with direct
