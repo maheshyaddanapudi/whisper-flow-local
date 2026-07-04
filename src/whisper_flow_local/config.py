@@ -162,6 +162,42 @@ SCHEMA: tuple[Option, ...] = (
     Option(
         "audio.cues", "bool", True, "Play short start/stop sounds so push-to-talk works eyes-free."
     ),
+    # [vad]
+    Option(
+        "vad.enabled",
+        "bool",
+        True,
+        "Two-layer VAD: silence auto-stop plus Silero audio scrubbing before STT.",
+    ),
+    Option(
+        "vad.silence_threshold",
+        "float",
+        0.01,
+        "RMS energy below this counts as silence.",
+        minimum=0.0,
+        maximum=1.0,
+    ),
+    Option(
+        "vad.silence_duration_ms",
+        "int",
+        900,
+        "Stop after this much continuous silence (VAD and continuous modes).",
+        minimum=100,
+        maximum=10000,
+    ),
+    # [dictionary]
+    Option(
+        "dictionary.path",
+        "str",
+        "",
+        "Path to the personal-dictionary TOML; empty uses the default location.",
+    ),
+    Option(
+        "dictionary.enabled",
+        "bool",
+        True,
+        "Apply vocabulary hints and deterministic replacements.",
+    ),
     # [stt]
     Option(
         "stt.backend",

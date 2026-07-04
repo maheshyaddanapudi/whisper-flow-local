@@ -7,10 +7,13 @@ tested with fakes, while the daemon only supplies real adapters and threads.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from .cleanup.engine import CleanupEngine
 from .cleanup.prompts import CleanupGoals
 from .config import Config
-from .controller import ControllerConfig
+from .controller import ControllerConfig, ReplaceFn
+from .dictionary.replacements import Dictionary, ReplacementEngine, initial_prompt, load
 from .inject.base import InjectionChain, Injector
 from .recording import Mode
 
@@ -63,15 +66,44 @@ def build_cleanup_engine(config: Config) -> CleanupEngine | None:
     )
 
 
-def build_controller_config(config: Config) -> ControllerConfig:
+def default_dictionary_path() -> Path:
+    """Standard dictionary location next to the config file."""
+    from .config import default_config_path
+
+    return default_config_path().parent / "dictionary.toml"
+
+
+def dictionary_path(config: Config) -> Path:
+    configured = str(config.get("dictionary.path"))
+    return Path(configured) if configured else default_dictionary_path()
+
+
+def build_dictionary(config: Config) -> Dictionary:
+    """Load the personal dictionary (empty if disabled or absent)."""
+    if not bool(config.get("dictionary.enabled")):
+        return Dictionary()
+    return load(dictionary_path(config))
+
+
+def build_replacement(dictionary: Dictionary) -> ReplaceFn | None:
+    """Return a replacement function, or None if the dictionary has no rules."""
+    if not (dictionary.phrases or dictionary.punctuation or dictionary.words):
+        return None
+    return ReplacementEngine(dictionary).apply
+
+
+def build_controller_config(
+    config: Config, dictionary: Dictionary | None = None
+) -> ControllerConfig:
     """Map the persisted config onto the controller's runtime config."""
     language = str(config.get("general.language"))
+    prompt = initial_prompt(dictionary) if dictionary is not None else None
     return ControllerConfig(
         mode=Mode(str(config.get("hotkey.mode"))),
         hold_threshold_s=int(config.get("hotkey.hold_threshold_ms")) / 1000.0,
         min_duration_s=int(config.get("hotkey.min_duration_ms")) / 1000.0,
         language=None if language == "auto" else language,
-        initial_prompt=None,
+        initial_prompt=prompt,
         auto_submit=bool(config.get("inject.auto_submit")),
         trailing_space=bool(config.get("inject.trailing_space")),
         cleanup_min_chars=int(config.get("cleanup.min_chars")),

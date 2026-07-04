@@ -16,6 +16,11 @@ _Generated from the config schema — do not edit by hand._
 | `audio.device` | str | `""` |  | Input device name substring; empty uses the system default. |
 | `audio.chunk_ms` | int | `500` |  | Audio capture chunk size in milliseconds. |
 | `audio.cues` | bool | `true` |  | Play short start/stop sounds so push-to-talk works eyes-free. |
+| `vad.enabled` | bool | `true` |  | Two-layer VAD: silence auto-stop plus Silero audio scrubbing before STT. |
+| `vad.silence_threshold` | float | `0.01` |  | RMS energy below this counts as silence. |
+| `vad.silence_duration_ms` | int | `900` |  | Stop after this much continuous silence (VAD and continuous modes). |
+| `dictionary.path` | str | `""` |  | Path to the personal-dictionary TOML; empty uses the default location. |
+| `dictionary.enabled` | bool | `true` |  | Apply vocabulary hints and deterministic replacements. |
 | `stt.backend` | str | `"auto"` | auto, faster_whisper, whispercpp | Speech-to-text engine. 'auto' picks whisper.cpp on macOS, else faster-whisper. |
 | `stt.model` | str | `"small.en"` |  | Model name/size to load. |
 | `stt.compute_type` | str | `"int8"` | int8, int8_float16, float16, float32 | faster-whisper compute type. |

@@ -99,5 +99,34 @@ talking to a **real (mock) Ollama HTTP server**:
 ≤1.5 s for a 10 s utterance) needs a real Ollama + model; the pipeline wiring,
 gating, fallback and prompt contract are all verified here.
 
-## Phase 3 — Dictation quality (pending)
+## Phase 3 — Dictation quality ✅ (logic) / partially deferred to Phase 4 (rendering)
+
+**Automated.** 260 tests, **100% line+branch coverage** on all logic. `ruff`,
+`ruff format --check`, `mypy` (strict, 35 files) clean.
+
+**Delivered and tested (logic):**
+- **Personal dictionary** (`dictionary/replacements.py`): TOML load/dump with
+  validation, capped vocabulary → Whisper `initial_prompt`, and the layered
+  deterministic replacement engine (phrases longest-first → spoken-punctuation
+  with leading-space cleanup → word map where `""` deletes), plus space tidying.
+  Wired to run **before** the LLM (verified in the controller test) so fixes are
+  reliable regardless of cleanup.
+- **Quick-add**: `whisper-flow dict add <word>` / `dict show`, dedup + file
+  create; tested end to end.
+- **Two-layer VAD — layer 1** (`vad.py`): RMS + silence-duration endpointer,
+  fully tested (needs speech before firing; resets on new speech; boundary
+  cases). Layer 2 (Silero `vad_filter`) is already set in the faster-whisper
+  adapter.
+- **UI status mapping** (`ui/status.py`): the three visually-distinct states
+  (recording/transcribing/cleaning) defined once, tested.
+- New config: `[vad]`, `[dictionary]`.
+
+**Deferred to Phase 4 (needs real audio/hardware to wire and verify):**
+- The streaming capture loop that feeds live mic RMS to the endpointer for
+  auto-stop, and the continuous auto-rearm loop, are daemon-thread integration
+  over the real `SoundDeviceSource` — built and verified with the Phase 4
+  hardware. The endpointer logic they depend on is done and tested here.
+- Tray icon + overlay rendering (pystray/Pillow) and audio cues are thin device
+  adapters; the state→badge logic they render is tested here.
+
 ## Phase 4 — Cross-platform hardening (pending)

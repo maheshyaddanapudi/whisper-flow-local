@@ -168,3 +168,42 @@ dual-hotkey wiring in-process lands with the real hotkey backend (Phase 4).
 
 **Choice.** `clean` flag on triggers; `--raw` CLI flag; IPC `clean` arg. Default
 is clean=true (cleanup is the headline feature).
+
+---
+
+## 2026-07-04 — Dictionary: layered replacement order and where it runs
+
+**Question.** How to order the deterministic replacement layers, and where in
+the pipeline do they run relative to the LLM?
+
+**Findings.** nerd-dictation's ordering is the proven one: multi-word phrase
+fixes first (so "my sequel" → "MySQL" before any word-level rule touches
+"sequel"), then spoken punctuation (consuming the leading space so "hello comma"
+→ "hello,"), then the single-word map (empty value = delete a filler). Phrases
+must be applied longest-first so "cube it all" beats "cube". These are
+*deterministic* fixes for recognition errors and dictated punctuation, so they
+must run **before** the LLM cleanup (and their result is what we keep in
+history) — otherwise a flaky model could undo them.
+
+**Choice.** ReplacementEngine applies phrases (longest-first) → punctuation →
+words → space-tidy, in the controller's `replace` seam, before `cleanup`. Vocab
+hints are capped at 20 for `initial_prompt` (overloading degrades STT — a
+documented Superwhisper failure).
+
+---
+
+## 2026-07-04 — VAD is two layers; only the endpointer is pure logic
+
+**Question.** "Two-layer VAD default-on" — what is testable now vs hardware?
+
+**Findings.** Layer 1 (end-of-utterance detection for auto-stop/continuous) is a
+pure RMS-energy + silence-duration decision — unit-tested in `vad.py`. Layer 2
+(scrubbing captured audio to prevent silence hallucinations) is faster-whisper's
+built-in Silero `vad_filter=True`, set in the STT adapter. The *streaming* that
+feeds layer 1 with live mic levels, and the continuous auto-rearm loop, are
+daemon-thread integration over the real audio device — deferred to Phase 4 with
+the rest of the hardware wiring, since they can't be meaningfully tested without
+a mic. The logic they orchestrate is complete and tested.
+
+**Choice.** Ship and test the endpointer + Silero flag now; wire the streaming
+capture/continuous loop in Phase 4 alongside the real `SoundDeviceSource`.

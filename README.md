@@ -10,12 +10,13 @@ It's an original, MIT-licensed take on Wispr Flow / Superwhisper. Unlike Wispr
 Flow — whose transcription [always happens in the cloud](docs/RESEARCH.md) — this
 never sends your voice off the machine.
 
-> **Status: under active construction.** Phases 0–2 are complete and tested: the
-> daemon, the hotkey→record→transcribe→**Ollama cleanup**→inject loop, the
-> IPC/CLI control verbs, clipboard-paste injection with snapshot/restore, and the
-> LLM cleanup pass (filler removal, punctuation) with a raw-transcript fallback
-> if Ollama is unavailable. Two-layer VAD, dictionary, and tray (Phase 3) are
-> next. See [docs/PLAN.md](docs/PLAN.md) for the roadmap and
+> **Status: under active construction.** Phases 0–3 (logic) are complete and
+> tested: the daemon, the hotkey→record→transcribe→**Ollama cleanup**→inject
+> loop, IPC/CLI control verbs, clipboard-paste injection with snapshot/restore,
+> the LLM cleanup pass with raw-transcript fallback, the personal dictionary
+> (vocab hints + deterministic replacements), and VAD endpointing. Phase 4
+> (real mic/hotkey wiring, whisper.cpp on Apple Silicon, tray, packaging) is
+> next. See [docs/PLAN.md](docs/PLAN.md) and
 > [docs/VERIFICATION.md](docs/VERIFICATION.md) for exactly what's verified.
 
 ## Install
@@ -71,7 +72,17 @@ whisper-flow status          # JSON: current state, history size, last text
 whisper-flow paste-last      # re-paste the last dictation
 whisper-flow paste-last-raw  # re-paste it without cleanup
 whisper-flow --raw toggle    # dictate but skip LLM cleanup this time
+whisper-flow dict add MySQL  # add a word to your personal dictionary
+whisper-flow dict show       # list dictionary vocabulary
 ```
+
+### Personal dictionary
+
+A single TOML file (`~/.config/whisper-flow/dictionary.toml`) improves accuracy
+two ways: **vocabulary hints** (proper nouns/jargon, seeded into the recognizer)
+and **deterministic replacements** applied before the LLM — multi-word phrase
+fixes, spoken punctuation ("comma" → `,`), and a word map where an empty value
+deletes a word. Add vocab fast with `whisper-flow dict add <word>`.
 
 ### Cleanup (the Ollama pass)
 

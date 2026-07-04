@@ -27,6 +27,8 @@ from .stt.base import STTBackend
 
 # Cleanup seam: raw transcript -> cleaned transcript. None disables it (Phase 1).
 CleanupFn = Callable[[str], str]
+# Replacement seam: applies deterministic dictionary fixes to the transcript.
+ReplaceFn = Callable[[str], str]
 
 
 @dataclass
@@ -61,6 +63,7 @@ class _Deps:
     injection: InjectionChain
     history: History
     cleanup: CleanupFn | None = None
+    replace: ReplaceFn | None = None
     on_state_change: Callable[[State], None] = lambda _s: None
     notify: dict[str, Callable[[], None]] = field(default_factory=dict)
 
@@ -183,6 +186,10 @@ class Controller:
             return DictationResult(status="error", reason=f"stt: {exc}")
 
         raw = transcript.text.strip()
+        # Deterministic dictionary replacements run BEFORE the LLM so they are
+        # reliable regardless of cleanup; the corrected text is what we keep.
+        if self._d.replace is not None and raw:
+            raw = self._d.replace(raw).strip()
         if not raw:
             self._sm.to(State.IDLE)
             self._to_idle()

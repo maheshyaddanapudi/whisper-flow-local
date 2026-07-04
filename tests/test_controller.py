@@ -293,3 +293,36 @@ def test_hybrid_press_while_held_not_latched_is_noop() -> None:
     # a second press while still held (not latched) -> resolver NONE -> noop
     assert ctl.on_hotkey_press(0.1).status == "noop"
     assert ctl.state == State.RECORDING
+
+
+def test_replace_seam_runs_before_cleanup() -> None:
+    """Deterministic replacement is applied to the raw text before the LLM."""
+    seen_by_cleanup: list[str] = []
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("i love my sequel and basically it is great to use daily"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        cleanup=lambda raw: seen_by_cleanup.append(raw) or raw.upper(),
+        replace=lambda t: t.replace("my sequel", "MySQL").replace("basically ", ""),
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15, cleanup_min_chars=10), deps)
+    ctl.toggle()
+    result = ctl.toggle()
+    # cleanup received the REPLACED text, and history keeps the replaced raw
+    assert "MySQL" in seen_by_cleanup[0]
+    assert "basically" not in seen_by_cleanup[0]
+    assert "MySQL" in result.raw
+
+
+def test_replace_seam_emptying_text_yields_empty() -> None:
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("um uh"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        replace=lambda t: "",  # replacement deletes everything
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
+    ctl.toggle()
+    assert ctl.toggle().status == "empty"

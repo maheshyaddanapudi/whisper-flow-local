@@ -53,6 +53,34 @@ def test_doctor(capsys, tmp_path) -> None:
     assert "environment report" in capsys.readouterr().out
 
 
+def _cfg_with_dict(tmp_path):
+    cfg = tmp_path / "c.toml"
+    dict_path = tmp_path / "dictionary.toml"
+    cfg.write_text(f'[dictionary]\npath = "{dict_path}"\n', encoding="utf-8")
+    return cfg
+
+
+def test_dict_add_and_show(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    assert main(["--config", str(cfg), "dict", "add", "Anthropic"]) == 0
+    assert "added 'Anthropic'" in capsys.readouterr().out
+    assert main(["--config", str(cfg), "dict", "show"]) == 0
+    out = capsys.readouterr().out
+    assert "Anthropic" in out
+
+
+def test_dict_show_empty(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    assert main(["--config", str(cfg), "dict", "show"]) == 0
+    assert "(empty)" in capsys.readouterr().out
+
+
+def test_dict_add_empty_word_errors(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    assert main(["--config", str(cfg), "dict", "add", "   "]) == 1
+    assert "error" in capsys.readouterr().err
+
+
 def test_invalid_config_returns_2(capsys, tmp_path) -> None:
     p = tmp_path / "bad.toml"
     p.write_text("[hotkey]\nbogus = 1\n", encoding="utf-8")

@@ -6,10 +6,14 @@ from fakes import FakeInjector
 from whisper_flow_local.builder import (
     build_cleanup_engine,
     build_controller_config,
+    build_dictionary,
     build_injection_chain,
+    build_replacement,
+    dictionary_path,
     resolve_stt_backend_name,
 )
 from whisper_flow_local.config import Config
+from whisper_flow_local.dictionary.replacements import Dictionary
 from whisper_flow_local.recording import Mode
 
 
@@ -101,3 +105,41 @@ def test_build_controller_config_explicit_language() -> None:
     assert cc.language == "en"
     assert cc.auto_submit is True
     assert cc.trailing_space is True
+
+
+def test_build_controller_config_initial_prompt_from_dictionary() -> None:
+    cc = build_controller_config(Config(), Dictionary(vocab=("MySQL", "Kubernetes")))
+    assert cc.initial_prompt is not None
+    assert "MySQL" in cc.initial_prompt
+
+
+def test_dictionary_path_default_and_override(tmp_path) -> None:
+    cfg = Config()
+    assert dictionary_path(cfg).name == "dictionary.toml"
+    cfg.data["dictionary"]["path"] = str(tmp_path / "custom.toml")
+    assert dictionary_path(cfg) == tmp_path / "custom.toml"
+
+
+def test_build_dictionary_disabled() -> None:
+    cfg = Config()
+    cfg.data["dictionary"]["enabled"] = False
+    assert build_dictionary(cfg) == Dictionary()
+
+
+def test_build_dictionary_loads_file(tmp_path) -> None:
+    d_path = tmp_path / "dictionary.toml"
+    d_path.write_text('vocab = ["Anthropic"]\n[words]\num = ""\n', encoding="utf-8")
+    cfg = Config()
+    cfg.data["dictionary"]["path"] = str(d_path)
+    d = build_dictionary(cfg)
+    assert d.vocab == ("Anthropic",)
+
+
+def test_build_replacement_none_when_no_rules() -> None:
+    assert build_replacement(Dictionary(vocab=("only", "vocab"))) is None
+
+
+def test_build_replacement_applies_rules() -> None:
+    fn = build_replacement(Dictionary(words=(("gonna", "going to"),)))
+    assert fn is not None
+    assert fn("i am gonna go") == "i am going to go"

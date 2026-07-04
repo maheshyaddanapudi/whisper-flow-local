@@ -14,7 +14,9 @@ from .audio_capture import SoundDeviceSource
 from .builder import (
     build_cleanup_engine,
     build_controller_config,
+    build_dictionary,
     build_injection_chain,
+    build_replacement,
     resolve_stt_backend_name,
 )
 from .config import Config
@@ -54,12 +56,14 @@ def build_daemon(config: Config) -> Daemon:
     chain = build_injection_chain(list(config.get("inject.chain")), injectors)
     audio = SoundDeviceSource(int(config.get("audio.sample_rate")), str(config.get("audio.device")))
     engine = build_cleanup_engine(config)
+    dictionary = build_dictionary(config)
     deps = _Deps(
         audio=audio,
         stt=_build_stt(config),
         injection=chain,
         history=History(int(config.get("history.size"))),
         cleanup=engine.clean if engine is not None else None,
+        replace=build_replacement(dictionary),
     )
-    controller = Controller(build_controller_config(config), deps)
+    controller = Controller(build_controller_config(config, dictionary), deps)
     return Daemon(controller, default_socket_path())

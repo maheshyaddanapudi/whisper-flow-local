@@ -65,6 +65,12 @@ def _build_parser() -> argparse.ArgumentParser:
 
     sub.add_parser("gen-docs", help="Print the config reference (Markdown) to stdout.")
 
+    dct = sub.add_parser("dict", help="Manage the personal dictionary.")
+    dct_sub = dct.add_subparsers(dest="dict_command", required=True)
+    dct_sub.add_parser("show", help="Print the dictionary path and vocabulary.")
+    add = dct_sub.add_parser("add", help="Add a vocabulary word.")
+    add.add_argument("word", help="The word or phrase to add.")
+
     sub.add_parser("start", help="Run the dictation daemon (foreground).")
     for verb in _CONTROL_VERBS:
         sub.add_parser(verb, help=f"Send '{verb}' to the running daemon.")
@@ -104,6 +110,26 @@ def _cmd_config(args: argparse.Namespace, config: Config, path: Path) -> int:
 
 def _cmd_gen_docs() -> int:
     print(generate_docs(), end="")
+    return 0
+
+
+def _cmd_dict(args: argparse.Namespace, config: Config) -> int:
+    from .builder import dictionary_path
+    from .dictionary.replacements import DictionaryError, load, quick_add
+
+    path = dictionary_path(config)
+    if args.dict_command == "show":
+        dictionary = load(path)
+        print(f"dictionary: {path}")
+        print("vocab: " + (", ".join(dictionary.vocab) if dictionary.vocab else "(empty)"))
+        return 0
+    # add
+    try:
+        updated = quick_add(path, args.word)
+    except DictionaryError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"added '{args.word}' ({len(updated.vocab)} vocab entries)")
     return 0
 
 
@@ -157,6 +183,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_config(args, config, path)
     if args.command == "gen-docs":
         return _cmd_gen_docs()
+    if args.command == "dict":
+        return _cmd_dict(args, config)
     if args.command == "start":
         return _cmd_start(config, args)
     if args.command in _CONTROL_VERBS:
