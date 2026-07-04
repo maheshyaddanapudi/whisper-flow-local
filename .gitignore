@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+
+# Project runtime (never commit user data or models)
+*.bin
+*.gguf
+*.wav
+!tests/fixtures/*.wav
+models/
+*.log
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
