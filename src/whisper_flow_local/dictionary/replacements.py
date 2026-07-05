@@ -16,6 +16,7 @@ Stored as one TOML file (diffable/syncable). All pure logic, fully tested.
 
 from __future__ import annotations
 
+import difflib
 import re
 import tomllib
 from dataclasses import dataclass, field
@@ -150,6 +151,33 @@ def add_replacement(path: Path, source: str, target: str) -> Dictionary:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(dumps(updated), encoding="utf-8")
     return updated
+
+
+def derive_replacements(before: str, after: str) -> list[tuple[str, str]]:
+    """Infer (wrong -> right) substitutions from a corrected dictation.
+
+    Word-level diff: only *replacements* (a run of words swapped for another)
+    become rules — pure insertions/deletions are ignored, since those are
+    usually one-off edits rather than recurring recognition errors. This powers
+    ``correct --last``: fix what was injected and the diffs are learned.
+    """
+    b = before.split()
+    a = after.split()
+    matcher = difflib.SequenceMatcher(a=b, b=a, autojunk=False)
+    pairs: list[tuple[str, str]] = []
+    for tag, i1, i2, j1, j2 in matcher.get_opcodes():
+        # 'replace' spans always have non-empty source and target by definition.
+        if tag == "replace":
+            pairs.append((" ".join(b[i1:i2]), " ".join(a[j1:j2])))
+    return pairs
+
+
+def learn_corrections(path: Path, before: str, after: str) -> list[tuple[str, str]]:
+    """Derive and persist replacements from a before/after pair."""
+    pairs = derive_replacements(before, after)
+    for source, target in pairs:
+        add_replacement(path, source, target)
+    return pairs
 
 
 class ReplacementEngine:

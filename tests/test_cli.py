@@ -98,6 +98,116 @@ def test_correct_empty_source_errors(capsys, tmp_path) -> None:
     assert "error" in capsys.readouterr().err
 
 
+def test_correct_no_args_errors(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    assert main(["--config", str(cfg), "correct"]) == 1
+    assert "SOURCE and TARGET" in capsys.readouterr().err
+
+
+def _daemon_with_last(tmp_path, last_text):
+    from fakes import FakeAudioSource, FakeInjector, FakeSTT
+    from whisper_flow_local.controller import Controller, ControllerConfig, _Deps
+    from whisper_flow_local.daemon import Daemon
+    from whisper_flow_local.history import History
+    from whisper_flow_local.inject.base import InjectionChain
+
+    history = History(size=5)
+    if last_text:
+        history.add(last_text, "")
+    deps = _Deps(
+        audio=FakeAudioSource(),
+        stt=FakeSTT("x"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=history,
+    )
+    daemon = Daemon(Controller(ControllerConfig(), deps), tmp_path / "wf.sock")
+    daemon.start()
+    return daemon
+
+
+def test_correct_from_last_learns_diff(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    daemon = _daemon_with_last(tmp_path, "i deployed my sequel today")
+    try:
+        rc = main(
+            [
+                "--config",
+                str(cfg),
+                "--socket",
+                str(tmp_path / "wf.sock"),
+                "correct",
+                "--last",
+                "i deployed MySQL today",
+            ]
+        )
+        assert rc == 0
+        assert "my sequel" in capsys.readouterr().out
+    finally:
+        daemon.stop()
+    from whisper_flow_local.dictionary.replacements import load
+
+    assert ("my sequel", "MySQL") in load(tmp_path / "dictionary.toml").phrases
+
+
+def test_correct_from_last_no_history(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    daemon = _daemon_with_last(tmp_path, "")
+    try:
+        rc = main(
+            [
+                "--config",
+                str(cfg),
+                "--socket",
+                str(tmp_path / "wf.sock"),
+                "correct",
+                "--last",
+                "anything",
+            ]
+        )
+        assert rc == 1
+        assert "no last dictation" in capsys.readouterr().err
+    finally:
+        daemon.stop()
+
+
+def test_correct_from_last_identical_noop(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    daemon = _daemon_with_last(tmp_path, "already correct text")
+    try:
+        rc = main(
+            [
+                "--config",
+                str(cfg),
+                "--socket",
+                str(tmp_path / "wf.sock"),
+                "correct",
+                "--last",
+                "already correct text",
+            ]
+        )
+        assert rc == 0
+        assert "no changes to learn" in capsys.readouterr().out
+    finally:
+        daemon.stop()
+
+
+def test_correct_from_last_no_daemon(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    rc = main(
+        [
+            "--config",
+            str(cfg),
+            "--socket",
+            str(tmp_path / "absent.sock"),
+            "correct",
+            "--last",
+            "text",
+        ]
+    )
+    assert rc == 1
+    assert "error" in capsys.readouterr().err
+
+
 def test_doctor_shows_macos_permissions(capsys, tmp_path, monkeypatch) -> None:
     import whisper_flow_local.cli as climod
 

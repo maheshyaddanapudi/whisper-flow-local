@@ -9,8 +9,10 @@ from whisper_flow_local.dictionary.replacements import (
     DictionaryError,
     ReplacementEngine,
     add_replacement,
+    derive_replacements,
     dumps,
     initial_prompt,
+    learn_corrections,
     load,
     quick_add,
 )
@@ -155,6 +157,40 @@ def test_add_replacement_preserves_other_tiers(tmp_path) -> None:
 def test_add_replacement_rejects_empty(tmp_path) -> None:
     with pytest.raises(DictionaryError):
         add_replacement(tmp_path / "d.toml", "   ", "x")
+
+
+# --- derive/learn corrections from a before/after pair ------------------------
+
+
+def test_derive_single_word_substitution() -> None:
+    pairs = derive_replacements("i deployed my sequel today", "i deployed MySQL today")
+    assert pairs == [("my sequel", "MySQL")]
+
+
+def test_derive_multiple_substitutions() -> None:
+    pairs = derive_replacements("meet at too pm", "meet at 2 PM")
+    assert ("too", "2") in pairs or ("too pm", "2 PM") in pairs
+
+
+def test_derive_ignores_pure_insertion() -> None:
+    # after only adds words -> no substitution rule
+    assert derive_replacements("hello world", "hello there world") == []
+
+
+def test_derive_ignores_pure_deletion() -> None:
+    assert derive_replacements("hello there world", "hello world") == []
+
+
+def test_derive_identical_is_empty() -> None:
+    assert derive_replacements("same text", "same text") == []
+
+
+def test_learn_corrections_persists_and_applies(tmp_path) -> None:
+    path = tmp_path / "dictionary.toml"
+    pairs = learn_corrections(path, "i use my sequel daily", "i use MySQL daily")
+    assert ("my sequel", "MySQL") in pairs
+    # persisted and now applied by the engine
+    assert ReplacementEngine(load(path)).apply("my sequel rocks") == "MySQL rocks"
 
 
 # --- ReplacementEngine (the layered ordering) --------------------------------

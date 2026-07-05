@@ -92,8 +92,13 @@ def _build_parser() -> argparse.ArgumentParser:
     correct = sub.add_parser(
         "correct", help="Teach a correction (misheard -> right); applied automatically after."
     )
-    correct.add_argument("source", help="What it keeps getting wrong (word or phrase).")
-    correct.add_argument("target", help="What it should be instead.")
+    correct.add_argument("source", nargs="?", help="What it keeps getting wrong (word/phrase).")
+    correct.add_argument("target", nargs="?", help="What it should be instead.")
+    correct.add_argument(
+        "--last",
+        metavar="FIXED",
+        help="Correct the last dictation to FIXED; the differences are learned automatically.",
+    )
 
     return parser
 
@@ -162,12 +167,40 @@ def _cmd_correct(args: argparse.Namespace, config: Config) -> int:
     from .builder import dictionary_path
     from .dictionary.replacements import DictionaryError, add_replacement
 
+    path = dictionary_path(config)
+    if args.last is not None:
+        return _correct_from_last(args, path)
+    if not (args.source and args.target):
+        print("error: give SOURCE and TARGET, or use --last", file=sys.stderr)
+        return 1
     try:
-        add_replacement(dictionary_path(config), args.source, args.target)
+        add_replacement(path, args.source, args.target)
     except DictionaryError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"learned: '{args.source}' -> '{args.target}' (applied automatically from now on)")
+    return 0
+
+
+def _correct_from_last(args: argparse.Namespace, path: Path) -> int:
+    from .dictionary.replacements import learn_corrections
+    from .ipc import IPCError, send
+
+    try:
+        resp = send(_resolve_socket_path(args), "status")
+    except IPCError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    before = resp.get("data", {}).get("last_text", "") if resp.get("ok") else ""
+    if not before:
+        print("error: no last dictation to correct", file=sys.stderr)
+        return 1
+    pairs = learn_corrections(path, before, args.last)
+    if not pairs:
+        print("no changes to learn (texts already match)")
+        return 0
+    for source, target in pairs:
+        print(f"learned: '{source}' -> '{target}'")
     return 0
 
 
