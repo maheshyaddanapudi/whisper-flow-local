@@ -19,7 +19,7 @@ The plan (`docs/PLAN.md`) has **six phases, 0–5**.
 | 2 | Ollama cleanup | ✅ complete (real-model latency pending on-device) |
 | 3 | Dictation quality (dictionary, VAD) | ✅ logic complete; tray/streaming deferred |
 | 4 | Cross-platform hardening | ✅ logic + assembly complete; device I/O pending |
-| 5 | Differentiators (command mode, per-app tone, etc.) | 🟢 4 of 6 built; 2 hardware-deferred — see below |
+| 5 | Differentiators (command mode, per-app tone, etc.) | 🟢 all 6 built (logic); live-IO/rendering on device |
 
 "Complete" means logic at 100% coverage + assembled; it does **not** mean run on
 real hardware. The device-I/O paths (mic, hotkey, model inference, paste, tray)
@@ -186,33 +186,32 @@ CI.
 
 ---
 
-## Phase 5 — Differentiators 🟢 4 of 6 built
+## Phase 5 — Differentiators 🟢 all 6 built (logic complete)
 
-**Automated.** 391 tests, **100% line+branch coverage**; ruff + strict mypy clean.
+**Automated.** 409 tests, **100% line+branch coverage**; ruff + strict mypy clean.
 
 **Built and tested (with end-to-end demos against the real mock Ollama where
 applicable):**
 - **Command / instruction mode** — select text, hold the hotkey, speak an
   instruction ("make this formal"), and the LLM transforms the selection in
-  place. `whisper-flow --command ptt-up`. Verified E2E: selection + instruction
-  → transformed text injected. No growth guard (expansions are legitimate);
-  failure leaves the selection untouched.
-- **Per-app tone/formatting profiles** — detect the frontmost app at
-  record-start and force cleanup on/off, swap the cleanup prompt, or override
-  auto-submit per app (`profiles.py` matching is pure-tested; detection is a thin
-  seam).
-- **Transparency log** — in-memory record of exactly what was sent to and
-  returned from the LLM; `whisper-flow log`. Verifiable-privacy feature.
-- **Correction learning (lightweight)** — `whisper-flow correct "misheard"
-  "right"` adds a deterministic replacement so the fix auto-applies forever
-  after. Verified E2E: teach once → applied in the next dictation.
+  place. `whisper-flow --command ptt-up`. Verified E2E.
+- **Per-app tone/formatting profiles** — frontmost app at record-start forces
+  cleanup on/off, swaps the cleanup prompt, or overrides auto-submit per app.
+- **Transparency log** — in-memory record of exactly what was sent to/returned
+  from the LLM; `whisper-flow log`.
+- **Correction learning** — both explicit (`correct "misheard" "right"`) and
+  from-the-last-dictation (`correct --last "the fixed text"`, which word-diffs
+  and learns the substitutions). Verified E2E.
+- **Tray menu-bar + status icon + audio cues** — pure menu structure, action
+  dispatch, state→icon badge, and cue mapping all tested; pystray/Pillow/sound
+  rendering is the thin device seam.
+- **Streaming partial-preview coordinator** — the two-tier logic (fast-model
+  partials, deduped + error-swallowed, reset between utterances) is tested;
+  feeding it live growing audio and rendering the overlay are the device seam.
 
-**Not built (honestly deferred):**
-- **Streaming partial-transcript preview** — a tiny-model live preview while a
-  bigger model produces the final text. Needs real streaming STT + an overlay;
-  hardware-bound, not started.
-- **Fully automatic correction-learning** — watching the user's post-injection
-  edits and inferring corrections. Requires OS-level edit monitoring (invasive,
-  hard to do safely); the explicit `correct` command is the shipped substitute.
-- Tray/overlay/audio-cue rendering (shared with Phases 3–4) remains the pending
-  UI seam.
+**What remains device-only (not a logic gap — the pixels/IO themselves):**
+- Tray icon rendering, preview overlay rendering, the sound playback, and
+  feeding the streaming coordinator from a live mic — all need a real desktop.
+- **Fully automatic edit-watching** (infer corrections by silently monitoring
+  everything you retype) is deliberately **not** built: it is keylogger-shaped
+  and privacy-hostile. `correct --last` is the safe, explicit equivalent.

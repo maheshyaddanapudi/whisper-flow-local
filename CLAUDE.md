@@ -103,11 +103,14 @@ around these — grant them or accept the degraded mode.
 
 ## Status (keep this section current)
 
-- **The plan has SIX phases (0–5).** Phases **0–4 complete**; **Phase 5: 4 of 6
-  differentiators built** (command mode, per-app profiles, transparency log,
-  correction-learning), 2 deferred (streaming preview, auto edit-watching).
-  Do not describe the project as "all phases done".
-- ~390 tests, 100% coverage, gate green, wheel builds.
+- **The plan has SIX phases (0–5), ALL BUILT at the logic level.** Phase 5's six
+  differentiators are all implemented (command mode, per-app profiles,
+  transparency log, correction-learning incl. `--last`, tray/cues, streaming-
+  preview coordinator). What is NOT verified is **device I/O** (real mic, hotkey,
+  model inference, paste, and the tray/overlay/sound rendering) — those need a
+  real desktop. The only deliberately-unbuilt item is fully automatic
+  edit-watching (privacy-hostile; `correct --last` is the safe equivalent).
+- ~410 tests, 100% coverage, gate green, wheel builds.
 - **Verified in CI/headless:** all logic, plus a full assembly of the real
   `build_daemon` with physical devices faked, and the cleanup pass against a real
   mock Ollama HTTP server (incl. kill-mid-flight → raw fallback).
@@ -115,16 +118,15 @@ around these — grant them or accept the degraded mode.
   capture, real global hotkey (pynput), real STT latency (faster-whisper /
   whisper.cpp), real paste into a focused app. These are standard libraries doing
   standard things, but "watched it work on a Mac" is still pending.
-- **Not built (deliberately deferred):**
-  - Menu-bar tray icon + overlay + audio cues (the status *logic* is done and
-    tested in `ui/status.py`; only the rendering seam is pending).
-  - The streaming mic-RMS → VAD capture wiring and continuous auto-rearm loop
-    (the `Endpointer` and `VadCapture` logic are done/tested; the live mic feed
-    is the pending seam).
-  - Phase 5 remaining: streaming partial preview (hardware), automatic
-    edit-watching correction-learning (the explicit `correct` command ships
-    instead). Command mode, per-app profiles, transparency log, and lightweight
-    correction-learning ARE built.
+- **Logic built; only device rendering/IO pending on a desktop:**
+  - Tray icon + overlay + audio cues: menu/badge/cue *logic* tested (`ui/menu.py`,
+    `ui/status.py`, `ui/cues.py`); pystray/Pillow/sound rendering is the seam
+    (`ui/tray.py`, omitted).
+  - Streaming preview: `stt/preview.py` coordinator tested; the live mic feed +
+    overlay draw are the seam. Same for `VadCapture`/`Endpointer` continuous loop.
+- **Deliberately NOT built:**
+  - Fully automatic edit-watching correction-learning (keylogger-shaped;
+    `correct --last` is the safe equivalent). Everything else in Phase 5 IS built.
   - Mobile (Wispr Flow has iOS/Android; this is desktop-only: macOS/Windows/Linux).
 
 ## Gotchas

@@ -33,6 +33,8 @@ environment variable > config file > default.
 | `stt.compute_type` | `WHISPER_FLOW_STT_COMPUTE_TYPE` | str | `"int8"` | int8, int8_float16, float16, float32 | faster-whisper compute type. |
 | `stt.device` | `WHISPER_FLOW_STT_DEVICE` | str | `"auto"` | auto, cpu, cuda | Compute device for faster-whisper. |
 | `stt.unload_after_seconds` | `WHISPER_FLOW_STT_UNLOAD_AFTER_SECONDS` | int | `300` |  | Unload the STT model after this idle period (0 = keep forever). |
+| `stt.streaming_preview` | `WHISPER_FLOW_STT_STREAMING_PREVIEW` | bool | `false` |  | Show a live partial transcript (fast model) while you speak. |
+| `stt.preview_model` | `WHISPER_FLOW_STT_PREVIEW_MODEL` | str | `"tiny.en"` |  | Fast model used only for the streaming preview. |
 | `cleanup.enabled` | `WHISPER_FLOW_CLEANUP_ENABLED` | bool | `true` |  | Run the Ollama LLM cleanup pass on transcripts (core feature). |
 | `cleanup.model` | `WHISPER_FLOW_CLEANUP_MODEL` | str | `"gemma3:4b"` |  | Ollama model for cleanup. Models under ~3B may transform meaning. |
 | `cleanup.ollama_host` | `WHISPER_FLOW_CLEANUP_OLLAMA_HOST` | str | `"http://localhost:11434"` |  | Base URL of the local Ollama server. |

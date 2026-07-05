@@ -248,6 +248,18 @@ SCHEMA: tuple[Option, ...] = (
         minimum=0,
         maximum=86400,
     ),
+    Option(
+        "stt.streaming_preview",
+        "bool",
+        False,
+        "Show a live partial transcript (fast model) while you speak.",
+    ),
+    Option(
+        "stt.preview_model",
+        "str",
+        "tiny.en",
+        "Fast model used only for the streaming preview.",
+    ),
     # [cleanup]  (wired in Phase 2)
     Option(
         "cleanup.enabled",

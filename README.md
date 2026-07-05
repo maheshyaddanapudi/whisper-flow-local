@@ -10,16 +10,18 @@ It's an original, MIT-licensed take on Wispr Flow / Superwhisper. Unlike Wispr
 Flow — whose transcription [always happens in the cloud](docs/RESEARCH.md) — this
 never sends your voice off the machine.
 
-> **Status: Phases 0–4 (the core) complete; Phase 5 (differentiators) mostly
-> built.** The plan has six phases (0–5). Phases 0–4 — the full
+> **Status: all six phases (0–5) built and tested at 100% coverage.** The full
 > hotkey→record→transcribe→**Ollama cleanup**→inject loop, IPC/CLI, injection
 > with snapshot/restore, personal dictionary, two-layer VAD, cross-platform
-> injection, `bench`, macOS permission guidance, packaging — are built and tested
-> at 100% coverage. **Phase 5**: command/instruction mode, per-app tone profiles,
-> transparency log, and lightweight correction-learning are **built**; streaming
-> preview and automatic edit-watching are **not**. The **device I/O** (real mic,
-> hotkey, model inference, paste, tray) is wired but only verifiable on a real
-> desktop — see [docs/VERIFICATION.md](docs/VERIFICATION.md) for the exact line.
+> injection, packaging — plus the Phase 5 differentiators: command/instruction
+> mode, per-app tone profiles, transparency log, correction-learning (explicit
+> and from-your-last-fix), the menu-bar tray, and the streaming-preview
+> coordinator. What remains is **device I/O only** — real mic, global hotkey,
+> model inference, paste into a focused app, and the tray/overlay/sound
+> *rendering* — which needs a real desktop to verify (the logic behind each is
+> tested with fakes). See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the
+> exact CI-vs-device line. The one intentionally-unbuilt item is silent
+> edit-watching (privacy-hostile); `correct --last` is the safe equivalent.
 
 ## Install
 
