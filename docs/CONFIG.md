@@ -43,6 +43,7 @@ environment variable > config file > default.
 | `cleanup.goal_stutters` | `WHISPER_FLOW_CLEANUP_GOAL_STUTTERS` | bool | `true` |  | Collapse stutters and self-corrections. |
 | `cleanup.goal_lists` | `WHISPER_FLOW_CLEANUP_GOAL_LISTS` | bool | `true` |  | Format dictated lists. |
 | `cleanup.prompt_override` | `WHISPER_FLOW_CLEANUP_PROMPT_OVERRIDE` | str | `""` |  | Custom cleanup system prompt; empty uses the compiled default. |
+| `cleanup.instruction_prompt_override` | `WHISPER_FLOW_CLEANUP_INSTRUCTION_PROMPT_OVERRIDE` | str | `""` |  | Custom command-mode (instruction) system prompt; empty uses the default. |
 | `cleanup.max_growth_ratio` | `WHISPER_FLOW_CLEANUP_MAX_GROWTH_RATIO` | float | `2.5` |  | Safety net: if cleaned text is longer than this ratio of the raw (a model that answered/expanded instead of cleaning), inject raw instead. |
 | `inject.chain` | `WHISPER_FLOW_INJECT_CHAIN` | list[str] | `["clipboard", "keystrokes", "copy_only"]` |  | Ordered injection backends to try, first that works wins. |
 | `inject.auto_submit` | `WHISPER_FLOW_INJECT_AUTO_SUBMIT` | bool | `false` |  | Press Enter after injecting (off by default; never surprise the user). |

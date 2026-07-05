@@ -54,6 +54,24 @@ class CleanupGoals:
         return [name for name in _GOAL_ORDER if flags[name]]
 
 
+INSTRUCTION_GUARDRAIL = (
+    "You transform the user's text according to their instruction. Apply the "
+    "instruction and output only the resulting text — no preamble, no "
+    "explanation, no quotes. If the instruction is unclear, make the smallest "
+    "reasonable edit."
+)
+
+
+def build_instruction_prompt(override: str = "") -> str:
+    """System prompt for command/instruction mode (transform selected text)."""
+    return override.strip() or INSTRUCTION_GUARDRAIL
+
+
+def build_instruction_message(instruction: str, text: str) -> str:
+    """The user message pairing a spoken instruction with the selected text."""
+    return f"Instruction: {instruction.strip()}\n\nText:\n{text}"
+
+
 def build_system_prompt(goals: CleanupGoals, override: str = "") -> str:
     """Return the cleanup system prompt.
 

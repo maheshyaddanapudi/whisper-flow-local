@@ -88,6 +88,52 @@ def test_engine_system_prompt_exposed() -> None:
     assert "cleaner" in eng.system_prompt.lower()
 
 
+def test_engine_instruct_transforms() -> None:
+    captured: dict = {}
+
+    def chat(host, model, system, user, **kw):
+        captured["system"] = system
+        captured["user"] = user
+        return "  Dear Sir or Madam,  "
+
+    eng = _engine(chat)
+    assert eng.instruct("make it formal", "hey whats up") == "Dear Sir or Madam,"
+    assert "transform" in captured["system"].lower()
+    assert "make it formal" in captured["user"]
+    assert "hey whats up" in captured["user"]
+
+
+def test_engine_instruct_empty_selection_is_noop() -> None:
+    called = []
+    eng = _engine(lambda *a, **k: called.append(1) or "x")
+    assert eng.instruct("do stuff", "   ") == ""
+    assert called == []  # never contacted the model
+
+
+def test_engine_instruct_failure_returns_empty() -> None:
+    def boom(*a, **k):
+        raise OllamaError("down")
+
+    assert _engine(boom).instruct("do", "some text") == ""
+
+
+def test_engine_instruct_no_growth_guard() -> None:
+    # Instructions may legitimately expand text far beyond the input.
+    long_out = "A very long expanded version. " * 20
+    assert _engine(lambda *a, **k: long_out).instruct("expand this", "hi") == long_out.strip()
+
+
+def test_engine_instruction_prompt_exposed_and_overridable() -> None:
+    eng = CleanupEngine(
+        host="h",
+        model="m",
+        goals=CleanupGoals(),
+        instruction_override="be terse",
+        chat=lambda *a, **k: "x",
+    )
+    assert eng.instruction_prompt == "be terse"
+
+
 def test_engine_passes_prompt_and_keepalive_to_chat(mock_ollama) -> None:
     # Real chat via mock server: verify the system prompt reaches Ollama.
     mock_ollama.chat_response = lambda text: "Cleaned."

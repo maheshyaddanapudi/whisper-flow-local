@@ -326,3 +326,85 @@ def test_replace_seam_emptying_text_yields_empty() -> None:
     ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
     ctl.toggle()
     assert ctl.toggle().status == "empty"
+
+
+def _command_controller(*, selection: str, transformed: str = "TRANSFORMED", **deps_kw):
+    injector = FakeInjector("f")
+    seen: dict = {}
+
+    def instruct(instruction: str, text: str) -> str:
+        seen["instruction"] = instruction
+        seen["text"] = text
+        return transformed
+
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("make this formal"),
+        injection=InjectionChain([injector]),
+        history=History(),
+        instruct=deps_kw.get("instruct", instruct),
+        get_selection=deps_kw.get("get_selection", lambda: selection),
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
+    return ctl, injector, seen
+
+
+def test_command_mode_transforms_selection() -> None:
+    ctl, injector, seen = _command_controller(selection="hey whats up")
+    ctl.ptt_down()
+    result = ctl.ptt_up(command=True)
+    assert result.status == "injected"
+    assert injector.requests[-1].text == "TRANSFORMED"
+    assert seen["instruction"] == "make this formal"
+    assert seen["text"] == "hey whats up"
+    assert ctl.state == State.IDLE
+
+
+def test_command_mode_no_selection_is_noop() -> None:
+    ctl, injector, _ = _command_controller(selection="   ")
+    ctl.ptt_down()
+    result = ctl.ptt_up(command=True)
+    assert result.status == "noop"
+    assert "no text selected" in result.reason
+    assert injector.requests == []
+    assert ctl.state == State.IDLE
+
+
+def test_command_mode_no_change_leaves_selection() -> None:
+    ctl, injector, _ = _command_controller(selection="text", transformed="")
+    ctl.ptt_down()
+    result = ctl.ptt_up(command=True)
+    assert result.status == "noop"
+    assert injector.requests == []
+
+
+def test_command_mode_instruct_error_is_noop() -> None:
+    def boom(instruction, text):
+        raise RuntimeError("ollama down")
+
+    ctl, _injector, _ = _command_controller(selection="text", instruct=boom)
+    ctl.ptt_down()
+    result = ctl.ptt_up(command=True)
+    assert result.status == "noop"
+    assert ctl.state == State.IDLE
+
+
+def test_command_mode_not_configured_errors() -> None:
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("make it formal"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        # no instruct / get_selection seams
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
+    ctl.ptt_down()
+    result = ctl.ptt_up(command=True)
+    assert result.status == "error"
+    assert "not configured" in result.reason
+
+
+def test_command_mode_via_toggle() -> None:
+    ctl, _injector, _ = _command_controller(selection="some text")
+    ctl.toggle()
+    assert ctl.toggle(command=True).status == "injected"

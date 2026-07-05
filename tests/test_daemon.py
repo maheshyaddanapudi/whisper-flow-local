@@ -76,6 +76,26 @@ def test_dispatch_ptt_up_clean_arg() -> None:
     assert result["status"] == "injected"
 
 
+def test_dispatch_command_arg() -> None:
+    from whisper_flow_local.controller import ControllerConfig
+
+    injector = FakeInjector("f")
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("make it formal"),
+        injection=InjectionChain([injector]),
+        history=History(),
+        instruct=lambda instruction, text: "FORMAL TEXT",
+        get_selection=lambda: "hey",
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
+    dispatch = make_dispatch(ctl)
+    dispatch("ptt-down", {})
+    result = dispatch("ptt-up", {"command": True})
+    assert result["status"] == "injected"
+    assert injector.requests[-1].text == "FORMAL TEXT"
+
+
 def test_daemon_over_socket(tmp_path) -> None:
     sock = tmp_path / "wf.sock"
     daemon = Daemon(_controller(), sock)

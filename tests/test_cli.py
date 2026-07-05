@@ -180,6 +180,25 @@ def test_raw_flag_sends_clean_false(tmp_path) -> None:
         server.stop()
 
 
+def test_command_flag_sends_command_true(tmp_path) -> None:
+    from whisper_flow_local.ipc import IPCServer
+
+    seen: list = []
+
+    def dispatch(verb: str, args: dict) -> dict:
+        seen.append((verb, args))
+        return {"status": "injected"}
+
+    sock = tmp_path / "wf.sock"
+    server = IPCServer(sock, dispatch)
+    server.start()
+    try:
+        assert main(["--socket", str(sock), "--command", "ptt-up"]) == 0
+        assert seen == [("ptt-up", {"command": True})]
+    finally:
+        server.stop()
+
+
 def test_start_builds_and_runs_daemon(capsys, tmp_path, monkeypatch) -> None:
     import whisper_flow_local.build as build_mod
 

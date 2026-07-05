@@ -28,7 +28,12 @@ from .hotkeys.base import HotkeyListener
 from .inject.base import Injector
 from .inject.clipboard import ClipboardInjector
 from .inject.copyonly import CopyOnlyInjector
-from .inject.system import KeystrokeInjector, SystemClipboard, make_paster
+from .inject.system import (
+    KeystrokeInjector,
+    SystemClipboard,
+    make_paster,
+    make_selection_reader,
+)
 from .ipc import default_socket_path
 from .stt.base import STTBackend
 
@@ -88,6 +93,8 @@ def build_daemon(config: Config) -> Daemon:
         history=History(int(config.get("history.size"))),
         cleanup=engine.clean if engine is not None else None,
         replace=build_replacement(dictionary),
+        instruct=engine.instruct if engine is not None else None,
+        get_selection=make_selection_reader(clipboard),
     )
     controller = Controller(build_controller_config(config, dictionary), deps)
     listener = None

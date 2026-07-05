@@ -60,6 +60,7 @@ def build_cleanup_engine(config: Config) -> CleanupEngine | None:
         model=str(config.get("cleanup.model")),
         goals=goals,
         prompt_override=str(config.get("cleanup.prompt_override")),
+        instruction_override=str(config.get("cleanup.instruction_prompt_override")),
         keep_alive=str(config.get("cleanup.keep_alive")),
         timeout=float(config.get("cleanup.timeout_seconds")),
         max_growth_ratio=float(config.get("cleanup.max_growth_ratio")),

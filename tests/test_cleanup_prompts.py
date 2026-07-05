@@ -6,7 +6,10 @@ import pytest
 
 from whisper_flow_local.cleanup.prompts import (
     GUARDRAIL,
+    INSTRUCTION_GUARDRAIL,
     CleanupGoals,
+    build_instruction_message,
+    build_instruction_prompt,
     build_system_prompt,
 )
 
@@ -85,3 +88,26 @@ def test_guardrail_always_present_for_every_goal_subset() -> None:
         flags[i] = True
         prompt = build_system_prompt(CleanupGoals(*flags))
         assert GUARDRAIL in prompt
+
+
+# --- command/instruction mode prompts ----------------------------------------
+
+
+def test_instruction_prompt_default() -> None:
+    assert build_instruction_prompt() == INSTRUCTION_GUARDRAIL
+    assert "output only" in INSTRUCTION_GUARDRAIL.lower()
+
+
+def test_instruction_prompt_override() -> None:
+    assert build_instruction_prompt("  do X  ") == "do X"
+
+
+def test_instruction_message_pairs_instruction_and_text() -> None:
+    msg = build_instruction_message("make it formal", "hey whats up")
+    assert "Instruction: make it formal" in msg
+    assert "Text:\nhey whats up" in msg
+
+
+def test_instruction_prompt_is_plain_text() -> None:
+    assert "<" not in INSTRUCTION_GUARDRAIL
+    assert ">" not in INSTRUCTION_GUARDRAIL

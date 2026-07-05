@@ -53,6 +53,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="For toggle/ptt-up: inject the raw transcript, skipping LLM cleanup.",
     )
+    parser.add_argument(
+        "--command",
+        dest="command_mode",
+        action="store_true",
+        help="For toggle/ptt-up: command mode — transform the selected text per what you say.",
+    )
     sub = parser.add_subparsers(dest="command", required=True)
 
     sub.add_parser("doctor", help="Report available STT/Ollama/injection/hotkey capabilities.")
@@ -153,7 +159,11 @@ def _resolve_socket_path(args: argparse.Namespace) -> Path:
 def _cmd_send(args: argparse.Namespace) -> int:
     from .ipc import IPCError, send
 
-    verb_args = {"clean": False} if args.raw else {}
+    verb_args: dict[str, object] = {}
+    if args.raw:
+        verb_args["clean"] = False
+    if args.command_mode:
+        verb_args["command"] = True
     try:
         resp = send(_resolve_socket_path(args), args.command, verb_args)
     except IPCError as exc:

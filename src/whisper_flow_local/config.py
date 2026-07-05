@@ -288,6 +288,12 @@ SCHEMA: tuple[Option, ...] = (
         "Custom cleanup system prompt; empty uses the compiled default.",
     ),
     Option(
+        "cleanup.instruction_prompt_override",
+        "str",
+        "",
+        "Custom command-mode (instruction) system prompt; empty uses the default.",
+    ),
+    Option(
         "cleanup.max_growth_ratio",
         "float",
         2.5,

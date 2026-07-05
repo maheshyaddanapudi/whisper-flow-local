@@ -16,7 +16,12 @@ from collections.abc import Callable
 
 from .ollama import OllamaError
 from .ollama import chat as _default_chat
-from .prompts import CleanupGoals, build_system_prompt
+from .prompts import (
+    CleanupGoals,
+    build_instruction_message,
+    build_instruction_prompt,
+    build_system_prompt,
+)
 
 ChatFn = Callable[..., str]
 
@@ -29,6 +34,7 @@ class CleanupEngine:
         model: str,
         goals: CleanupGoals,
         prompt_override: str = "",
+        instruction_override: str = "",
         keep_alive: str = "30m",
         timeout: float = 8.0,
         max_growth_ratio: float = 2.5,
@@ -37,6 +43,7 @@ class CleanupEngine:
         self._host = host
         self._model = model
         self._system = build_system_prompt(goals, prompt_override)
+        self._instruction_system = build_instruction_prompt(instruction_override)
         self._keep_alive = keep_alive
         self._timeout = timeout
         self._max_growth_ratio = max_growth_ratio
@@ -45,6 +52,10 @@ class CleanupEngine:
     @property
     def system_prompt(self) -> str:
         return self._system
+
+    @property
+    def instruction_prompt(self) -> str:
+        return self._instruction_system
 
     def clean(self, raw: str) -> str:
         """Return cleaned text, or ``""`` to signal "fall back to raw"."""
@@ -64,6 +75,28 @@ class CleanupEngine:
             # The model answered/expanded instead of cleaning; trust the raw text.
             return ""
         return cleaned
+
+    def instruct(self, instruction: str, text: str) -> str:
+        """Command mode: transform ``text`` per a spoken ``instruction``.
+
+        Returns the transformed text, or ``""`` on failure (caller leaves the
+        selection unchanged). Unlike cleanup there is no growth guard —
+        instructions like "expand this" legitimately lengthen the text.
+        """
+        if not text.strip():
+            return ""
+        try:
+            out = self._chat(
+                self._host,
+                self._model,
+                self._instruction_system,
+                build_instruction_message(instruction, text),
+                keep_alive=self._keep_alive,
+                timeout=self._timeout,
+            )
+        except OllamaError:
+            return ""
+        return out.strip()
 
     def _plausibly_cleaned(self, raw: str, cleaned: str) -> bool:
         """Reject output that grew far beyond the input (answer/expansion).

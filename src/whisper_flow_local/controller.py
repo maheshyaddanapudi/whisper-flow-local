@@ -29,6 +29,10 @@ from .stt.base import STTBackend
 CleanupFn = Callable[[str], str]
 # Replacement seam: applies deterministic dictionary fixes to the transcript.
 ReplaceFn = Callable[[str], str]
+# Command mode: (spoken instruction, selected text) -> transformed text.
+InstructFn = Callable[[str, str], str]
+# Reads the currently selected text from the focused app (thin OS seam).
+SelectionFn = Callable[[], str]
 
 
 @dataclass
@@ -64,6 +68,8 @@ class _Deps:
     history: History
     cleanup: CleanupFn | None = None
     replace: ReplaceFn | None = None
+    instruct: InstructFn | None = None
+    get_selection: SelectionFn | None = None
     on_state_change: Callable[[State], None] = lambda _s: None
     notify: dict[str, Callable[[], None]] = field(default_factory=dict)
 
@@ -101,12 +107,12 @@ class Controller:
             return self._apply_intent(self._resolver.release(now))
 
     # --- IPC/scripting path ----------------------------------------------
-    def toggle(self, *, clean: bool = True) -> DictationResult:
+    def toggle(self, *, clean: bool = True, command: bool = False) -> DictationResult:
         with self._lock:
             if self._sm.state == State.IDLE:
                 return self._start()
             if self._sm.state == State.RECORDING:
-                return self._stop_and_process(clean=clean)
+                return self._stop_and_process(clean=clean, command=command)
             return DictationResult(status="busy", reason=self._sm.state.value)
 
     def ptt_down(self) -> DictationResult:
@@ -115,10 +121,10 @@ class Controller:
                 return self._start()
             return DictationResult(status="busy", reason=self._sm.state.value)
 
-    def ptt_up(self, *, clean: bool = True) -> DictationResult:
+    def ptt_up(self, *, clean: bool = True, command: bool = False) -> DictationResult:
         with self._lock:
             if self._sm.state == State.RECORDING:
-                return self._stop_and_process(clean=clean)
+                return self._stop_and_process(clean=clean, command=command)
             return DictationResult(status="noop")
 
     def cancel(self) -> DictationResult:
@@ -164,7 +170,7 @@ class Controller:
         self._d.audio.start()
         return DictationResult(status="started")
 
-    def _stop_and_process(self, *, clean: bool = True) -> DictationResult:
+    def _stop_and_process(self, *, clean: bool = True, command: bool = False) -> DictationResult:
         buffer = self._d.audio.stop()
         self._fire("stop")
         if buffer.duration_s < self._cfg.min_duration_s:
@@ -186,17 +192,51 @@ class Controller:
             return DictationResult(status="error", reason=f"stt: {exc}")
 
         raw = transcript.text.strip()
-        # Deterministic dictionary replacements run BEFORE the LLM so they are
-        # reliable regardless of cleanup; the corrected text is what we keep.
-        if self._d.replace is not None and raw:
-            raw = self._d.replace(raw).strip()
         if not raw:
             self._sm.to(State.IDLE)
             self._to_idle()
             return DictationResult(status="empty")
 
+        # Command mode: the transcript is an instruction; transform the selected
+        # text with it instead of dictating.
+        if command:
+            return self._run_command(raw)
+
+        # Deterministic dictionary replacements run BEFORE the LLM so they are
+        # reliable regardless of cleanup; the corrected text is what we keep.
+        if self._d.replace is not None:
+            raw = self._d.replace(raw).strip()
+            if not raw:
+                self._sm.to(State.IDLE)
+                self._to_idle()
+                return DictationResult(status="empty")
+
         cleaned = self._run_cleanup(raw) if clean else ""
         return self._finish_inject(cleaned or raw, raw, cleaned)
+
+    def _run_command(self, instruction: str) -> DictationResult:
+        """Transform the focused app's selected text per a spoken instruction."""
+        if self._d.instruct is None or self._d.get_selection is None:
+            self._sm.to(State.IDLE)
+            self._to_idle()
+            return DictationResult(status="error", reason="command mode not configured")
+        selection = self._d.get_selection().strip()
+        if not selection:
+            self._sm.to(State.IDLE)
+            self._to_idle()
+            return DictationResult(status="noop", reason="no text selected")
+        self._sm.to(State.CLEANING)  # reuse the transform state
+        self._d.on_state_change(State.CLEANING)
+        self._fire("cleaning")
+        try:
+            transformed = self._d.instruct(instruction, selection)
+        except Exception:
+            transformed = ""
+        if not transformed:
+            self._sm.reset()
+            self._to_idle()
+            return DictationResult(status="noop", reason="no change")
+        return self._finish_inject(transformed, transformed, "")
 
     def _run_cleanup(self, raw: str) -> str:
         if self._d.cleanup is None or len(raw) < self._cfg.cleanup_min_chars:

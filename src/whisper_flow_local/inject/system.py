@@ -75,6 +75,35 @@ def make_paster() -> Any:
     return paste
 
 
+def make_selection_reader(clipboard: SystemClipboard) -> Any:
+    """Return a ``get_selection() -> str`` that copies the focused selection.
+
+    Sends Cmd/Ctrl+C, waits briefly for the clipboard to update, reads it, then
+    restores the prior clipboard. Thin seam (pynput + OS clipboard); verified on
+    the target machine.
+    """
+    import time
+
+    from pynput.keyboard import Controller, Key
+
+    keyboard = Controller()
+    modifier = Key.cmd if platform.system() == "Darwin" else Key.ctrl
+
+    def get_selection() -> str:
+        saved = clipboard.get_text()
+        with keyboard.pressed(modifier):
+            keyboard.press("c")
+            keyboard.release("c")
+        time.sleep(0.1)  # let the app place the selection on the clipboard
+        selection = clipboard.get_text()
+        if selection == saved:
+            return ""  # nothing was selected (clipboard unchanged)
+        clipboard.set_text(saved)
+        return selection
+
+    return get_selection
+
+
 class KeystrokeInjector:
     """Types text character-by-character via pynput (paste-hostile-app fallback)."""
 
