@@ -7,14 +7,17 @@ tested with fakes, while the daemon only supplies real adapters and threads.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from .cleanup.engine import CleanupEngine
 from .cleanup.prompts import CleanupGoals
 from .config import Config
-from .controller import ControllerConfig, ReplaceFn
+from .controller import ControllerConfig, ProfileFn, ReplaceFn
 from .dictionary.replacements import Dictionary, ReplacementEngine, initial_prompt, load
 from .inject.base import InjectionChain, Injector
+from .profiles import ActiveProfile, Profile, match_profile
+from .profiles import load as load_profiles
 from .recording import Mode
 
 
@@ -91,6 +94,38 @@ def build_replacement(dictionary: Dictionary) -> ReplaceFn | None:
     if not (dictionary.phrases or dictionary.punctuation or dictionary.words):
         return None
     return ReplacementEngine(dictionary).apply
+
+
+def default_profiles_path() -> Path:
+    from .config import default_config_path
+
+    return default_config_path().parent / "profiles.toml"
+
+
+def profiles_path(config: Config) -> Path:
+    configured = str(config.get("profiles.path"))
+    return Path(configured) if configured else default_profiles_path()
+
+
+def build_profiles(config: Config) -> list[Profile]:
+    """Load per-app profiles (empty if disabled or absent)."""
+    if not bool(config.get("profiles.enabled")):
+        return []
+    return load_profiles(profiles_path(config))
+
+
+def build_profile_resolver(
+    profiles: list[Profile], detect: Callable[[], tuple[str, str]]
+) -> ProfileFn | None:
+    """Return a ``resolve_profile()`` seam, or None if there are no profiles."""
+    if not profiles:
+        return None
+
+    def resolve() -> ActiveProfile:
+        app, title = detect()
+        return match_profile(profiles, app, title)
+
+    return resolve
 
 
 def build_controller_config(

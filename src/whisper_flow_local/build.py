@@ -17,6 +17,8 @@ from .builder import (
     build_controller_config,
     build_dictionary,
     build_injection_chain,
+    build_profile_resolver,
+    build_profiles,
     build_replacement,
     resolve_stt_backend_name,
 )
@@ -86,6 +88,9 @@ def build_daemon(config: Config) -> Daemon:
     audio = SoundDeviceSource(int(config.get("audio.sample_rate")), str(config.get("audio.device")))
     engine = build_cleanup_engine(config)
     dictionary = build_dictionary(config)
+    from .frontmost import detect as detect_frontmost
+
+    profiles = build_profiles(config)
     deps = _Deps(
         audio=audio,
         stt=_build_stt(config),
@@ -95,6 +100,7 @@ def build_daemon(config: Config) -> Daemon:
         replace=build_replacement(dictionary),
         instruct=engine.instruct if engine is not None else None,
         get_selection=make_selection_reader(clipboard),
+        resolve_profile=build_profile_resolver(profiles, detect_frontmost),
     )
     controller = Controller(build_controller_config(config, dictionary), deps)
     listener = None

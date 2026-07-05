@@ -57,13 +57,17 @@ class CleanupEngine:
     def instruction_prompt(self) -> str:
         return self._instruction_system
 
-    def clean(self, raw: str) -> str:
-        """Return cleaned text, or ``""`` to signal "fall back to raw"."""
+    def clean(self, raw: str, system_override: str = "") -> str:
+        """Return cleaned text, or ``""`` to signal "fall back to raw".
+
+        ``system_override`` (from a per-app profile) replaces the default
+        cleanup prompt for this call only.
+        """
         try:
             out = self._chat(
                 self._host,
                 self._model,
-                self._system,
+                system_override.strip() or self._system,
                 raw,
                 keep_alive=self._keep_alive,
                 timeout=self._timeout,

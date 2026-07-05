@@ -143,3 +143,49 @@ def test_build_replacement_applies_rules() -> None:
     fn = build_replacement(Dictionary(words=(("gonna", "going to"),)))
     assert fn is not None
     assert fn("i am gonna go") == "i am going to go"
+
+
+def test_build_profiles_disabled() -> None:
+    from whisper_flow_local.builder import build_profiles
+
+    cfg = Config()
+    cfg.data["profiles"]["enabled"] = False
+    assert build_profiles(cfg) == []
+
+
+def test_build_profiles_loads_file(tmp_path) -> None:
+    from whisper_flow_local.builder import build_profiles
+
+    path = tmp_path / "profiles.toml"
+    path.write_text("[[profile]]\nname='slack'\napp='slack'\n", encoding="utf-8")
+    cfg = Config()
+    cfg.data["profiles"]["path"] = str(path)
+    profiles = build_profiles(cfg)
+    assert [p.name for p in profiles] == ["slack"]
+
+
+def test_profiles_path_default_and_override(tmp_path) -> None:
+    from whisper_flow_local.builder import profiles_path
+
+    cfg = Config()
+    assert profiles_path(cfg).name == "profiles.toml"
+    cfg.data["profiles"]["path"] = str(tmp_path / "p.toml")
+    assert profiles_path(cfg) == tmp_path / "p.toml"
+
+
+def test_build_profile_resolver_none_when_empty() -> None:
+    from whisper_flow_local.builder import build_profile_resolver
+
+    assert build_profile_resolver([], lambda: ("", "")) is None
+
+
+def test_build_profile_resolver_matches() -> None:
+    from whisper_flow_local.builder import build_profile_resolver
+    from whisper_flow_local.profiles import Profile
+
+    profiles = [Profile(name="slack", app_pattern="slack", auto_submit=True)]
+    resolve = build_profile_resolver(profiles, lambda: ("Slack", ""))
+    assert resolve is not None
+    active = resolve()
+    assert active.name == "slack"
+    assert active.auto_submit is True

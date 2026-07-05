@@ -204,6 +204,19 @@ SCHEMA: tuple[Option, ...] = (
         True,
         "Apply vocabulary hints and deterministic replacements.",
     ),
+    # [profiles]
+    Option(
+        "profiles.enabled",
+        "bool",
+        True,
+        "Apply per-app tone/formatting profiles based on the focused app.",
+    ),
+    Option(
+        "profiles.path",
+        "str",
+        "",
+        "Path to the per-app profiles TOML; empty uses the default location.",
+    ),
     # [stt]
     Option(
         "stt.backend",

@@ -57,7 +57,7 @@ def test_dispatch_toggle_clean_arg() -> None:
         stt=FakeSTT("a long enough transcript to exceed the fifty character gate here"),
         injection=InjectionChain([FakeInjector("f")]),
         history=History(size=5),
-        cleanup=lambda raw: calls.append(raw) or "CLEANED",
+        cleanup=lambda raw, _o="": calls.append(raw) or "CLEANED",
     )
     from whisper_flow_local.controller import ControllerConfig
 

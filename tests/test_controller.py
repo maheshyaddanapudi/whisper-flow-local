@@ -96,7 +96,7 @@ def test_injection_failure_is_error() -> None:
 def test_cleanup_runs_when_over_min_chars() -> None:
     seen: list[str] = []
 
-    def cleanup(raw: str) -> str:
+    def cleanup(raw: str, _override: str = "") -> str:
         seen.append(raw)
         return "CLEANED"
 
@@ -113,7 +113,7 @@ def test_cleanup_runs_when_over_min_chars() -> None:
 def test_cleanup_skipped_under_min_chars() -> None:
     called: list[str] = []
     ctl, *_ = make_controller(
-        stt_text="short", cleanup=lambda r: called.append(r) or "X", cleanup_min_chars=50
+        stt_text="short", cleanup=lambda r, _o="": called.append(r) or "X", cleanup_min_chars=50
     )
     ctl.toggle()
     result = ctl.toggle()
@@ -123,7 +123,7 @@ def test_cleanup_skipped_under_min_chars() -> None:
 
 
 def test_cleanup_failure_falls_back_to_raw() -> None:
-    def cleanup(raw: str) -> str:
+    def cleanup(raw: str, _override: str = "") -> str:
         raise RuntimeError("ollama down")
 
     ctl, _a, _s, injector, *_ = make_controller(cleanup=cleanup)
@@ -188,7 +188,7 @@ def test_hotkey_hybrid_tap_latch_then_stop() -> None:
 
 
 def test_paste_last_cleaned_and_raw() -> None:
-    ctl, _a, _s, injector, _history, _st = make_controller(cleanup=lambda r: "CLEANED")
+    ctl, _a, _s, injector, _history, _st = make_controller(cleanup=lambda r, _o="": "CLEANED")
     ctl.toggle()
     ctl.toggle()  # produces one dictation (raw + CLEANED)
     injector.requests.clear()
@@ -303,7 +303,7 @@ def test_replace_seam_runs_before_cleanup() -> None:
         stt=FakeSTT("i love my sequel and basically it is great to use daily"),
         injection=InjectionChain([FakeInjector("f")]),
         history=History(),
-        cleanup=lambda raw: seen_by_cleanup.append(raw) or raw.upper(),
+        cleanup=lambda raw, _o="": seen_by_cleanup.append(raw) or raw.upper(),
         replace=lambda t: t.replace("my sequel", "MySQL").replace("basically ", ""),
     )
     ctl = Controller(ControllerConfig(min_duration_s=0.15, cleanup_min_chars=10), deps)
@@ -408,3 +408,82 @@ def test_command_mode_via_toggle() -> None:
     ctl, _injector, _ = _command_controller(selection="some text")
     ctl.toggle()
     assert ctl.toggle(command=True).status == "injected"
+
+
+# --- per-app profiles ---------------------------------------------------------
+
+
+def _profile_controller(profile, *, cleanup=None):
+    from whisper_flow_local.profiles import ActiveProfile
+
+    injector = FakeInjector("f")
+    seen: dict = {}
+
+    def default_cleanup(raw, override=""):
+        seen["override"] = override
+        return "CLEANED"
+
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("a long enough dictated sentence to exceed the char gate here"),
+        injection=InjectionChain([injector]),
+        history=History(),
+        cleanup=cleanup or default_cleanup,
+        resolve_profile=lambda: profile if profile is not None else ActiveProfile(),
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15, cleanup_min_chars=10), deps)
+    return ctl, injector, seen
+
+
+def test_profile_disables_cleanup_for_app() -> None:
+    from whisper_flow_local.profiles import ActiveProfile
+
+    # e.g. a terminal profile: force cleanup off even though the user didn't ask.
+    ctl, injector, _ = _profile_controller(ActiveProfile(name="term", cleanup=False))
+    ctl.toggle()
+    result = ctl.toggle()
+    assert result.status == "injected"
+    assert result.cleaned == ""  # cleanup forced off by profile
+    assert injector.requests[-1].text.startswith("a long enough dictated")
+
+
+def test_profile_prompt_override_passed_to_cleanup() -> None:
+    from whisper_flow_local.profiles import ActiveProfile
+
+    ctl, _injector, seen = _profile_controller(
+        ActiveProfile(name="mail", prompt_override="Be very formal.")
+    )
+    ctl.toggle()
+    ctl.toggle()
+    assert seen["override"] == "Be very formal."
+
+
+def test_profile_auto_submit_override() -> None:
+    from whisper_flow_local.profiles import ActiveProfile
+
+    ctl, injector, _ = _profile_controller(ActiveProfile(name="chat", auto_submit=True))
+    ctl.toggle()
+    ctl.toggle()
+    assert injector.requests[-1].auto_submit is True
+
+
+def test_profile_captured_at_record_start() -> None:
+    from whisper_flow_local.profiles import ActiveProfile
+
+    calls = {"n": 0}
+
+    def resolve() -> ActiveProfile:
+        calls["n"] += 1
+        return ActiveProfile(name="x")
+
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("hello there this is a sentence"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        resolve_profile=resolve,
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
+    ctl.ptt_down()  # profile resolved here, once
+    ctl.ptt_up()
+    assert calls["n"] == 1  # resolved at record-start, not per-stage

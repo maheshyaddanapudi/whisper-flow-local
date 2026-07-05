@@ -26,6 +26,8 @@ environment variable > config file > default.
 | `vad.silence_duration_ms` | `WHISPER_FLOW_VAD_SILENCE_DURATION_MS` | int | `900` |  | Stop after this much continuous silence (VAD and continuous modes). |
 | `dictionary.path` | `WHISPER_FLOW_DICTIONARY_PATH` | str | `""` |  | Path to the personal-dictionary TOML; empty uses the default location. |
 | `dictionary.enabled` | `WHISPER_FLOW_DICTIONARY_ENABLED` | bool | `true` |  | Apply vocabulary hints and deterministic replacements. |
+| `profiles.enabled` | `WHISPER_FLOW_PROFILES_ENABLED` | bool | `true` |  | Apply per-app tone/formatting profiles based on the focused app. |
+| `profiles.path` | `WHISPER_FLOW_PROFILES_PATH` | str | `""` |  | Path to the per-app profiles TOML; empty uses the default location. |
 | `stt.backend` | `WHISPER_FLOW_STT_BACKEND` | str | `"auto"` | auto, faster_whisper, whispercpp | Speech-to-text engine. 'auto' picks whisper.cpp on macOS, else faster-whisper. |
 | `stt.model` | `WHISPER_FLOW_STT_MODEL` | str | `"small.en"` |  | Model name/size to load. |
 | `stt.compute_type` | `WHISPER_FLOW_STT_COMPUTE_TYPE` | str | `"int8"` | int8, int8_float16, float16, float32 | faster-whisper compute type. |

@@ -22,17 +22,21 @@ from .audio import AudioSource
 from .history import History
 from .inject.base import AllInjectorsFailed, InjectionChain, InjectRequest
 from .pipeline_state import State, StateMachine
+from .profiles import NO_PROFILE, ActiveProfile
 from .recording import Intent, Mode, RecordingResolver
 from .stt.base import STTBackend
 
-# Cleanup seam: raw transcript -> cleaned transcript. None disables it (Phase 1).
-CleanupFn = Callable[[str], str]
+# Cleanup seam: (raw transcript, optional per-app prompt override) -> cleaned.
+# None disables it (Phase 1).
+CleanupFn = Callable[[str, str], str]
 # Replacement seam: applies deterministic dictionary fixes to the transcript.
 ReplaceFn = Callable[[str], str]
 # Command mode: (spoken instruction, selected text) -> transformed text.
 InstructFn = Callable[[str, str], str]
 # Reads the currently selected text from the focused app (thin OS seam).
 SelectionFn = Callable[[], str]
+# Resolves the per-app profile for the focused app at record-start.
+ProfileFn = Callable[[], ActiveProfile]
 
 
 @dataclass
@@ -70,6 +74,7 @@ class _Deps:
     replace: ReplaceFn | None = None
     instruct: InstructFn | None = None
     get_selection: SelectionFn | None = None
+    resolve_profile: ProfileFn | None = None
     on_state_change: Callable[[State], None] = lambda _s: None
     notify: dict[str, Callable[[], None]] = field(default_factory=dict)
 
@@ -82,6 +87,8 @@ class Controller:
         self._resolver = RecordingResolver(config.mode, config.hold_threshold_s)
         self._history = deps.history
         self._lock = threading.RLock()
+        # Per-app profile captured at record-start (window may change later).
+        self._active_profile: ActiveProfile = NO_PROFILE
 
     # --- introspection ----------------------------------------------------
     @property
@@ -164,6 +171,10 @@ class Controller:
         return DictationResult(status="noop")
 
     def _start(self) -> DictationResult:
+        # Capture the per-app profile now, at record-start, not after STT.
+        self._active_profile = (
+            self._d.resolve_profile() if self._d.resolve_profile is not None else NO_PROFILE
+        )
         self._sm.to(State.RECORDING)
         self._d.on_state_change(State.RECORDING)
         self._fire("start")
@@ -211,7 +222,10 @@ class Controller:
                 self._to_idle()
                 return DictationResult(status="empty")
 
-        cleaned = self._run_cleanup(raw) if clean else ""
+        # A per-app profile can force cleanup on/off for this app (e.g. a
+        # terminal profile turns it off so punctuation isn't "fixed").
+        do_clean = clean if self._active_profile.cleanup is None else self._active_profile.cleanup
+        cleaned = self._run_cleanup(raw) if do_clean else ""
         return self._finish_inject(cleaned or raw, raw, cleaned)
 
     def _run_command(self, instruction: str) -> DictationResult:
@@ -245,7 +259,7 @@ class Controller:
         self._d.on_state_change(State.CLEANING)
         self._fire("cleaning")
         try:
-            return self._d.cleanup(raw)
+            return self._d.cleanup(raw, self._active_profile.prompt_override)
         except Exception:
             return ""
 
@@ -267,9 +281,12 @@ class Controller:
 
     def _do_inject(self, text: str) -> str:
         """Run the injection chain; return the backend used or raise."""
+        auto_submit = self._cfg.auto_submit
+        if self._active_profile.auto_submit is not None:
+            auto_submit = self._active_profile.auto_submit
         req = InjectRequest(
             text=text,
-            auto_submit=self._cfg.auto_submit,
+            auto_submit=auto_submit,
             trailing_space=self._cfg.trailing_space,
         )
         return self._d.injection.inject(req)
