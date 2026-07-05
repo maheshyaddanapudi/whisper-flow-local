@@ -180,6 +180,79 @@ def test_raw_flag_sends_clean_false(tmp_path) -> None:
         server.stop()
 
 
+def test_log_command_shows_calls(capsys, tmp_path) -> None:
+    from fakes import FakeAudioSource, FakeInjector, FakeSTT
+    from whisper_flow_local.controller import Controller, ControllerConfig, _Deps
+    from whisper_flow_local.daemon import Daemon
+    from whisper_flow_local.history import History
+    from whisper_flow_local.inject.base import InjectionChain
+    from whisper_flow_local.transparency import TransparencyLog
+
+    log = TransparencyLog(size=5)
+    log.record("cleanup", "system prompt", "um raw", "clean")
+    deps = _Deps(
+        audio=FakeAudioSource(),
+        stt=FakeSTT("x"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        transparency=log,
+    )
+    sock = tmp_path / "wf.sock"
+    daemon = Daemon(Controller(ControllerConfig(), deps), sock)
+    daemon.start()
+    try:
+        assert main(["--socket", str(sock), "log"]) == 0
+        out = capsys.readouterr().out
+        assert "cleanup" in out
+        assert "clean" in out
+    finally:
+        daemon.stop()
+
+
+def test_log_command_empty(capsys, tmp_path) -> None:
+    from fakes import FakeAudioSource, FakeInjector, FakeSTT
+    from whisper_flow_local.controller import Controller, ControllerConfig, _Deps
+    from whisper_flow_local.daemon import Daemon
+    from whisper_flow_local.history import History
+    from whisper_flow_local.inject.base import InjectionChain
+
+    deps = _Deps(
+        audio=FakeAudioSource(),
+        stt=FakeSTT("x"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+    )
+    sock = tmp_path / "wf.sock"
+    daemon = Daemon(Controller(ControllerConfig(), deps), sock)
+    daemon.start()
+    try:
+        assert main(["--socket", str(sock), "log"]) == 0
+        assert "no LLM calls" in capsys.readouterr().out
+    finally:
+        daemon.stop()
+
+
+def test_log_command_no_daemon(capsys, tmp_path) -> None:
+    assert main(["--socket", str(tmp_path / "absent.sock"), "log"]) == 1
+    assert "error" in capsys.readouterr().err
+
+
+def test_log_command_handler_error(capsys, tmp_path) -> None:
+    from whisper_flow_local.ipc import IPCServer
+
+    def dispatch(verb: str, args: dict) -> dict:
+        raise ValueError("kaboom")
+
+    sock = tmp_path / "wf.sock"
+    server = IPCServer(sock, dispatch)
+    server.start()
+    try:
+        assert main(["--socket", str(sock), "log"]) == 1
+        assert "kaboom" in capsys.readouterr().err
+    finally:
+        server.stop()
+
+
 def test_command_flag_sends_command_true(tmp_path) -> None:
     from whisper_flow_local.ipc import IPCServer
 

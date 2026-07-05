@@ -32,6 +32,23 @@ def test_dispatch_status() -> None:
     assert dispatch("status", {})["state"] == "idle"
 
 
+def test_dispatch_log() -> None:
+    from whisper_flow_local.transparency import TransparencyLog
+
+    log = TransparencyLog(size=5)
+    log.record("cleanup", "sys", "raw", "clean")
+    deps = _Deps(
+        audio=FakeAudioSource(),
+        stt=FakeSTT("x"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        transparency=log,
+    )
+    dispatch = make_dispatch(Controller(ControllerConfig(), deps))
+    result = dispatch("log", {"n": 5})
+    assert result["calls"][0]["output"] == "clean"
+
+
 def test_dispatch_all_control_verbs() -> None:
     dispatch = make_dispatch(_controller())
     assert dispatch("toggle", {})["status"] == "started"

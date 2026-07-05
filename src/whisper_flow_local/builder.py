@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from .cleanup.engine import CleanupEngine
+from .cleanup.engine import CleanupEngine, RecordFn
 from .cleanup.prompts import CleanupGoals
 from .config import Config
 from .controller import ControllerConfig, ProfileFn, ReplaceFn
@@ -47,8 +47,11 @@ def build_injection_chain(names: list[str], injectors: dict[str, Injector]) -> I
     return InjectionChain(ordered)
 
 
-def build_cleanup_engine(config: Config) -> CleanupEngine | None:
-    """Build the Ollama cleanup engine, or None if cleanup is disabled."""
+def build_cleanup_engine(config: Config, record: RecordFn | None = None) -> CleanupEngine | None:
+    """Build the Ollama cleanup engine, or None if cleanup is disabled.
+
+    ``record`` is an optional transparency callback (kind, system, user, output).
+    """
     if not bool(config.get("cleanup.enabled")):
         return None
     goals = CleanupGoals(
@@ -67,6 +70,7 @@ def build_cleanup_engine(config: Config) -> CleanupEngine | None:
         keep_alive=str(config.get("cleanup.keep_alive")),
         timeout=float(config.get("cleanup.timeout_seconds")),
         max_growth_ratio=float(config.get("cleanup.max_growth_ratio")),
+        record=record,
     )
 
 

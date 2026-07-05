@@ -487,3 +487,26 @@ def test_profile_captured_at_record_start() -> None:
     ctl.ptt_down()  # profile resolved here, once
     ctl.ptt_up()
     assert calls["n"] == 1  # resolved at record-start, not per-stage
+
+
+def test_transparency_recent_reads_log() -> None:
+    from whisper_flow_local.transparency import TransparencyLog
+
+    log = TransparencyLog(size=5)
+    log.record("cleanup", "sys", "raw", "clean")
+    deps = _Deps(
+        audio=FakeAudioSource(),
+        stt=FakeSTT("x"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        transparency=log,
+    )
+    ctl = Controller(ControllerConfig(), deps)
+    data = ctl.transparency_recent()
+    assert data["calls"][0]["kind"] == "cleanup"
+    assert data["calls"][0]["output"] == "clean"
+
+
+def test_transparency_recent_no_log() -> None:
+    ctl, *_ = make_controller()
+    assert ctl.transparency_recent()["calls"] == []

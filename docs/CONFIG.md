@@ -53,4 +53,6 @@ environment variable > config file > default.
 | `inject.paste_timeout_seconds` | `WHISPER_FLOW_INJECT_PASTE_TIMEOUT_SECONDS` | float | `2.0` |  | Max time to wait for a clipboard-paste backend to confirm. |
 | `history.size` | `WHISPER_FLOW_HISTORY_SIZE` | int | `10` |  | How many recent dictations to keep for re-paste (in memory). |
 | `history.persist` | `WHISPER_FLOW_HISTORY_PERSIST` | bool | `false` |  | Persist history to disk (off = audio/text never touch disk). |
+| `transparency.enabled` | `WHISPER_FLOW_TRANSPARENCY_ENABLED` | bool | `true` |  | Keep an in-memory log of exactly what was sent to the local LLM. |
+| `transparency.size` | `WHISPER_FLOW_TRANSPARENCY_SIZE` | int | `20` |  | How many recent LLM calls to keep (in memory only, never persisted). |
 | `ui.enabled` | `WHISPER_FLOW_UI_ENABLED` | bool | `true` |  | Show the tray icon and status overlay. |

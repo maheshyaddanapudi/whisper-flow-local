@@ -24,6 +24,8 @@ from .prompts import (
 )
 
 ChatFn = Callable[..., str]
+# (kind, system, user, output) recorded for the transparency log.
+RecordFn = Callable[[str, str, str, str], None]
 
 
 class CleanupEngine:
@@ -39,6 +41,7 @@ class CleanupEngine:
         timeout: float = 8.0,
         max_growth_ratio: float = 2.5,
         chat: ChatFn = _default_chat,
+        record: RecordFn | None = None,
     ) -> None:
         self._host = host
         self._model = model
@@ -48,6 +51,8 @@ class CleanupEngine:
         self._timeout = timeout
         self._max_growth_ratio = max_growth_ratio
         self._chat = chat
+        # Transparency: called with (kind, system, user, output) after each call.
+        self._record = record or (lambda *_a: None)
 
     @property
     def system_prompt(self) -> str:
@@ -63,17 +68,19 @@ class CleanupEngine:
         ``system_override`` (from a per-app profile) replaces the default
         cleanup prompt for this call only.
         """
+        system = system_override.strip() or self._system
         try:
             out = self._chat(
                 self._host,
                 self._model,
-                system_override.strip() or self._system,
+                system,
                 raw,
                 keep_alive=self._keep_alive,
                 timeout=self._timeout,
             )
         except OllamaError:
             return ""
+        self._record("cleanup", system, raw, out)
         cleaned = out.strip()
         if not self._plausibly_cleaned(raw, cleaned):
             # The model answered/expanded instead of cleaning; trust the raw text.
@@ -89,17 +96,19 @@ class CleanupEngine:
         """
         if not text.strip():
             return ""
+        message = build_instruction_message(instruction, text)
         try:
             out = self._chat(
                 self._host,
                 self._model,
                 self._instruction_system,
-                build_instruction_message(instruction, text),
+                message,
                 keep_alive=self._keep_alive,
                 timeout=self._timeout,
             )
         except OllamaError:
             return ""
+        self._record("command", self._instruction_system, message, out)
         return out.strip()
 
     def _plausibly_cleaned(self, raw: str, cleaned: str) -> bool:

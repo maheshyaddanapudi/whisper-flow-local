@@ -29,6 +29,8 @@ def make_dispatch(controller: Controller) -> Dispatch:
             return {"pong": True}
         if verb == "status":
             return controller.status()
+        if verb == "log":
+            return controller.transparency_recent(int(args.get("n", 10)))
         if verb == "toggle":
             return asdict(
                 controller.toggle(

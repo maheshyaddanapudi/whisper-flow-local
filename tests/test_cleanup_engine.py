@@ -123,6 +123,32 @@ def test_engine_instruct_no_growth_guard() -> None:
     assert _engine(lambda *a, **k: long_out).instruct("expand this", "hi") == long_out.strip()
 
 
+def test_engine_records_cleanup_call() -> None:
+    recorded: list = []
+    eng = _engine(lambda *a, **k: "Cleaned.", record=lambda *args: recorded.append(args))
+    eng.clean("um raw text")
+    assert recorded == [("cleanup", eng.system_prompt, "um raw text", "Cleaned.")]
+
+
+def test_engine_records_command_call() -> None:
+    recorded: list = []
+    eng = _engine(lambda *a, **k: "Formal.", record=lambda *args: recorded.append(args))
+    eng.instruct("make formal", "hey")
+    assert recorded[0][0] == "command"
+    assert "hey" in recorded[0][2]
+    assert recorded[0][3] == "Formal."
+
+
+def test_engine_does_not_record_on_failure() -> None:
+    recorded: list = []
+
+    def boom(*a, **k):
+        raise OllamaError("down")
+
+    _engine(boom, record=lambda *args: recorded.append(args)).clean("raw text here")
+    assert recorded == []  # nothing sent -> nothing logged
+
+
 def test_engine_instruction_prompt_exposed_and_overridable() -> None:
     eng = CleanupEngine(
         host="h",

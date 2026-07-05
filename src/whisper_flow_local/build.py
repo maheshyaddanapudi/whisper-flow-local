@@ -86,10 +86,13 @@ def build_daemon(config: Config) -> Daemon:
     clipboard = SystemClipboard()
     chain = build_injection_chain(list(config.get("inject.chain")), _build_injectors(clipboard))
     audio = SoundDeviceSource(int(config.get("audio.sample_rate")), str(config.get("audio.device")))
-    engine = build_cleanup_engine(config)
-    dictionary = build_dictionary(config)
     from .frontmost import detect as detect_frontmost
+    from .transparency import TransparencyLog
 
+    log = TransparencyLog(int(config.get("transparency.size")))
+    record = log.record if bool(config.get("transparency.enabled")) else None
+    engine = build_cleanup_engine(config, record=record)
+    dictionary = build_dictionary(config)
     profiles = build_profiles(config)
     deps = _Deps(
         audio=audio,
@@ -101,6 +104,7 @@ def build_daemon(config: Config) -> Daemon:
         instruct=engine.instruct if engine is not None else None,
         get_selection=make_selection_reader(clipboard),
         resolve_profile=build_profile_resolver(profiles, detect_frontmost),
+        transparency=log if bool(config.get("transparency.enabled")) else None,
     )
     controller = Controller(build_controller_config(config, dictionary), deps)
     listener = None

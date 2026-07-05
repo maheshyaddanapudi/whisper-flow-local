@@ -86,6 +86,9 @@ def _build_parser() -> argparse.ArgumentParser:
     for verb in _CONTROL_VERBS:
         sub.add_parser(verb, help=f"Send '{verb}' to the running daemon.")
 
+    log = sub.add_parser("log", help="Show what was recently sent to the local LLM.")
+    log.add_argument("-n", type=int, default=10, help="How many recent calls to show.")
+
     return parser
 
 
@@ -220,6 +223,29 @@ def _make_bench_timer(  # pragma: no cover - hardware seam
     return timer
 
 
+def _cmd_log(args: argparse.Namespace) -> int:
+    from .ipc import IPCError, send
+
+    try:
+        resp = send(_resolve_socket_path(args), "log", {"n": args.n})
+    except IPCError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    if not resp.get("ok"):
+        print(f"error: {resp.get('error', 'unknown')}", file=sys.stderr)
+        return 1
+    calls = resp.get("data", {}).get("calls", [])
+    if not calls:
+        print("no LLM calls recorded yet")
+        return 0
+    for i, call in enumerate(calls):
+        print(f"--- call {i + 1} ({call['kind']}) ---")
+        print(f"  system: {call['system']}")
+        print(f"  sent:   {call['user']}")
+        print(f"  got:    {call['output']}")
+    return 0
+
+
 def _cmd_start(config: Config, args: argparse.Namespace) -> int:
     from .build import build_daemon
 
@@ -253,6 +279,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_bench(config, args)
     if args.command == "start":
         return _cmd_start(config, args)
+    if args.command == "log":
+        return _cmd_log(args)
     if args.command in _CONTROL_VERBS:
         return _cmd_send(args)
     return 1  # pragma: no cover - argparse enforces a valid command

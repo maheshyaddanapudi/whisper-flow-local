@@ -352,6 +352,21 @@ SCHEMA: tuple[Option, ...] = (
         False,
         "Persist history to disk (off = audio/text never touch disk).",
     ),
+    # [transparency]
+    Option(
+        "transparency.enabled",
+        "bool",
+        True,
+        "Keep an in-memory log of exactly what was sent to the local LLM.",
+    ),
+    Option(
+        "transparency.size",
+        "int",
+        20,
+        "How many recent LLM calls to keep (in memory only, never persisted).",
+        minimum=0,
+        maximum=1000,
+    ),
     # [ui]
     Option("ui.enabled", "bool", True, "Show the tray icon and status overlay."),
 )

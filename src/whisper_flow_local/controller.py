@@ -25,6 +25,7 @@ from .pipeline_state import State, StateMachine
 from .profiles import NO_PROFILE, ActiveProfile
 from .recording import Intent, Mode, RecordingResolver
 from .stt.base import STTBackend
+from .transparency import TransparencyLog
 
 # Cleanup seam: (raw transcript, optional per-app prompt override) -> cleaned.
 # None disables it (Phase 1).
@@ -75,6 +76,7 @@ class _Deps:
     instruct: InstructFn | None = None
     get_selection: SelectionFn | None = None
     resolve_profile: ProfileFn | None = None
+    transparency: TransparencyLog | None = None
     on_state_change: Callable[[State], None] = lambda _s: None
     notify: dict[str, Callable[[], None]] = field(default_factory=dict)
 
@@ -102,6 +104,17 @@ class Controller:
             "recording": self._sm.state == State.RECORDING,
             "history_size": len(self._history),
             "last_text": last.text if last else "",
+        }
+
+    def transparency_recent(self, n: int = 10) -> dict[str, Any]:
+        """Recent LLM calls (what was sent/received), for the `log` command."""
+        log = self._d.transparency
+        calls = log.recent(n) if log is not None else []
+        return {
+            "calls": [
+                {"kind": c.kind, "system": c.system, "user": c.user, "output": c.output}
+                for c in calls
+            ]
         }
 
     # --- hotkey path ------------------------------------------------------
