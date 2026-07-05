@@ -8,6 +8,23 @@ checks for the target machine are listed.
 Build/CI environment: headless Linux container, Python 3.11, no mic, no display,
 no Ollama, no GPU.
 
+## Phase status (the honest summary)
+
+The plan (`docs/PLAN.md`) has **six phases, 0–5**.
+
+| Phase | Scope | Status |
+| --- | --- | --- |
+| 0 | Scaffold | ✅ complete |
+| 1 | Core loop (hotkey→record→STT→inject) | ✅ complete (device I/O pending on-device) |
+| 2 | Ollama cleanup | ✅ complete (real-model latency pending on-device) |
+| 3 | Dictation quality (dictionary, VAD) | ✅ logic complete; tray/streaming deferred |
+| 4 | Cross-platform hardening | ✅ logic + assembly complete; device I/O pending |
+| 5 | Differentiators (command mode, per-app tone, etc.) | 🟡 in progress — see below |
+
+"Complete" means logic at 100% coverage + assembled; it does **not** mean run on
+real hardware. The device-I/O paths (mic, hotkey, model inference, paste, tray)
+are wired but only verifiable on a real desktop. **Phase 5 is not finished.**
+
 ---
 
 ## Phase 0 — Scaffold ✅

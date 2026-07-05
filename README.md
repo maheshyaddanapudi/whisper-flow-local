@@ -10,17 +10,16 @@ It's an original, MIT-licensed take on Wispr Flow / Superwhisper. Unlike Wispr
 Flow — whose transcription [always happens in the cloud](docs/RESEARCH.md) — this
 never sends your voice off the machine.
 
-> **Status: feature-complete for v1, pending on-device verification.** All of the
-> logic across Phases 0–4 is built and tested at 100% coverage: the daemon and
-> pipeline state machine, the hotkey→record→transcribe→**Ollama cleanup**→inject
-> loop, IPC/CLI control verbs, clipboard-paste injection with snapshot/restore,
-> the LLM cleanup pass with raw-transcript fallback, the personal dictionary,
-> two-layer VAD + continuous capture, cross-platform injection (incl. Wayland/X11
-> detection), the `bench` command, macOS permission guidance, and packaging.
-> The **device I/O paths** (real mic, global hotkey, whisper.cpp/faster-whisper
-> transcription, paste into a focused app, tray) are wired and assembled but need
-> a real desktop to verify — see [docs/VERIFICATION.md](docs/VERIFICATION.md) for
-> the precise line between what's tested in CI and what to check on the machine.
+> **Status: Phases 0–4 (the core) complete; Phase 5 (differentiators) in
+> progress.** The plan has six phases (0–5). Phases 0–4 — the full
+> hotkey→record→transcribe→**Ollama cleanup**→inject loop, IPC/CLI, injection
+> with snapshot/restore, personal dictionary, two-layer VAD, cross-platform
+> injection, `bench`, macOS permission guidance, packaging — are built and tested
+> at 100% coverage. **Phase 5** (command/instruction mode, per-app tone profiles,
+> transparency log, correction-learning, streaming preview) is the "smart
+> extras" roadmap and is only partially built — see
+> [docs/VERIFICATION.md](docs/VERIFICATION.md) for exactly what's done, what's
+> pending on-device, and what's not started.
 
 ## Install
 

@@ -103,7 +103,9 @@ around these — grant them or accept the degraded mode.
 
 ## Status (keep this section current)
 
-- Phases 0–4 complete + env-var overrides. ~300 tests, 100% coverage, gate green,
+- **The plan has SIX phases (0–5).** Phases **0–4 are complete**; **Phase 5 is in
+  progress** (partially built). Do not describe the project as "all phases done".
+- Phases 0–4 + env-var overrides done. ~300 tests, 100% coverage, gate green,
   wheel builds.
 - **Verified in CI/headless:** all logic, plus a full assembly of the real
   `build_daemon` with physical devices faked, and the cleanup pass against a real
