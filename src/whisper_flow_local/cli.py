@@ -89,6 +89,12 @@ def _build_parser() -> argparse.ArgumentParser:
     log = sub.add_parser("log", help="Show what was recently sent to the local LLM.")
     log.add_argument("-n", type=int, default=10, help="How many recent calls to show.")
 
+    correct = sub.add_parser(
+        "correct", help="Teach a correction (misheard -> right); applied automatically after."
+    )
+    correct.add_argument("source", help="What it keeps getting wrong (word or phrase).")
+    correct.add_argument("target", help="What it should be instead.")
+
     return parser
 
 
@@ -149,6 +155,19 @@ def _cmd_dict(args: argparse.Namespace, config: Config) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(f"added '{args.word}' ({len(updated.vocab)} vocab entries)")
+    return 0
+
+
+def _cmd_correct(args: argparse.Namespace, config: Config) -> int:
+    from .builder import dictionary_path
+    from .dictionary.replacements import DictionaryError, add_replacement
+
+    try:
+        add_replacement(dictionary_path(config), args.source, args.target)
+    except DictionaryError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(f"learned: '{args.source}' -> '{args.target}' (applied automatically from now on)")
     return 0
 
 
@@ -275,6 +294,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _cmd_gen_docs()
     if args.command == "dict":
         return _cmd_dict(args, config)
+    if args.command == "correct":
+        return _cmd_correct(args, config)
     if args.command == "bench":
         return _cmd_bench(config, args)
     if args.command == "start":

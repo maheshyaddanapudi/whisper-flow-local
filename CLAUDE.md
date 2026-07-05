@@ -103,10 +103,11 @@ around these — grant them or accept the degraded mode.
 
 ## Status (keep this section current)
 
-- **The plan has SIX phases (0–5).** Phases **0–4 are complete**; **Phase 5 is in
-  progress** (partially built). Do not describe the project as "all phases done".
-- Phases 0–4 + env-var overrides done. ~300 tests, 100% coverage, gate green,
-  wheel builds.
+- **The plan has SIX phases (0–5).** Phases **0–4 complete**; **Phase 5: 4 of 6
+  differentiators built** (command mode, per-app profiles, transparency log,
+  correction-learning), 2 deferred (streaming preview, auto edit-watching).
+  Do not describe the project as "all phases done".
+- ~390 tests, 100% coverage, gate green, wheel builds.
 - **Verified in CI/headless:** all logic, plus a full assembly of the real
   `build_daemon` with physical devices faked, and the cleanup pass against a real
   mock Ollama HTTP server (incl. kill-mid-flight → raw fallback).
@@ -120,8 +121,10 @@ around these — grant them or accept the degraded mode.
   - The streaming mic-RMS → VAD capture wiring and continuous auto-rearm loop
     (the `Endpointer` and `VadCapture` logic are done/tested; the live mic feed
     is the pending seam).
-  - Phase 5 differentiators: per-app tone profiles, voice-editing of selected
-    text ("make this formal"), correction-learning, streaming partial preview.
+  - Phase 5 remaining: streaming partial preview (hardware), automatic
+    edit-watching correction-learning (the explicit `correct` command ships
+    instead). Command mode, per-app profiles, transparency log, and lightweight
+    correction-learning ARE built.
   - Mobile (Wispr Flow has iOS/Android; this is desktop-only: macOS/Windows/Linux).
 
 ## Gotchas

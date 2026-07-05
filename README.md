@@ -10,16 +10,16 @@ It's an original, MIT-licensed take on Wispr Flow / Superwhisper. Unlike Wispr
 Flow — whose transcription [always happens in the cloud](docs/RESEARCH.md) — this
 never sends your voice off the machine.
 
-> **Status: Phases 0–4 (the core) complete; Phase 5 (differentiators) in
-> progress.** The plan has six phases (0–5). Phases 0–4 — the full
+> **Status: Phases 0–4 (the core) complete; Phase 5 (differentiators) mostly
+> built.** The plan has six phases (0–5). Phases 0–4 — the full
 > hotkey→record→transcribe→**Ollama cleanup**→inject loop, IPC/CLI, injection
 > with snapshot/restore, personal dictionary, two-layer VAD, cross-platform
 > injection, `bench`, macOS permission guidance, packaging — are built and tested
-> at 100% coverage. **Phase 5** (command/instruction mode, per-app tone profiles,
-> transparency log, correction-learning, streaming preview) is the "smart
-> extras" roadmap and is only partially built — see
-> [docs/VERIFICATION.md](docs/VERIFICATION.md) for exactly what's done, what's
-> pending on-device, and what's not started.
+> at 100% coverage. **Phase 5**: command/instruction mode, per-app tone profiles,
+> transparency log, and lightweight correction-learning are **built**; streaming
+> preview and automatic edit-watching are **not**. The **device I/O** (real mic,
+> hotkey, model inference, paste, tray) is wired but only verifiable on a real
+> desktop — see [docs/VERIFICATION.md](docs/VERIFICATION.md) for the exact line.
 
 ## Install
 
@@ -76,7 +76,26 @@ whisper-flow paste-last-raw  # re-paste it without cleanup
 whisper-flow --raw toggle    # dictate but skip LLM cleanup this time
 whisper-flow dict add MySQL  # add a word to your personal dictionary
 whisper-flow dict show       # list dictionary vocabulary
+whisper-flow --command ptt-up      # command mode: transform the selected text
+whisper-flow correct "my sequel" MySQL  # teach a correction (auto-applied after)
+whisper-flow log             # show exactly what was sent to the local LLM
 ```
+
+### Command mode (voice-edit selected text)
+
+Select some text, hold a hotkey bound to `whisper-flow --command ptt-up`, and
+say an instruction — "make this formal", "turn into bullet points", "fix the
+grammar". The local LLM transforms the selection in place. If nothing's selected
+or the model fails, your text is left untouched.
+
+### It learns your corrections
+
+When STT keeps mishearing a term, teach it once:
+`whisper-flow correct "my sequel" "MySQL"`. That fix is applied deterministically
+to every future dictation — the on-device version of "never the same mistake
+twice". Per-app **profiles** (`profiles.toml`) additionally switch tone by app
+(casual for Slack, formal for Mail, raw for terminals), and `whisper-flow log`
+shows exactly what was sent to the LLM.
 
 ### Personal dictionary
 

@@ -81,6 +81,23 @@ def test_dict_add_empty_word_errors(capsys, tmp_path) -> None:
     assert "error" in capsys.readouterr().err
 
 
+def test_correct_learns_replacement(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    assert main(["--config", str(cfg), "correct", "my sequel", "MySQL"]) == 0
+    assert "learned" in capsys.readouterr().out
+    # it's now in the dictionary and would be applied
+    from whisper_flow_local.dictionary.replacements import load
+
+    d = load(tmp_path / "dictionary.toml")
+    assert ("my sequel", "MySQL") in d.phrases
+
+
+def test_correct_empty_source_errors(capsys, tmp_path) -> None:
+    cfg = _cfg_with_dict(tmp_path)
+    assert main(["--config", str(cfg), "correct", "   ", "x"]) == 1
+    assert "error" in capsys.readouterr().err
+
+
 def test_doctor_shows_macos_permissions(capsys, tmp_path, monkeypatch) -> None:
     import whisper_flow_local.cli as climod
 

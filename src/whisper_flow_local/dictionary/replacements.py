@@ -126,6 +126,32 @@ def quick_add(path: Path, word: str) -> Dictionary:
     return updated
 
 
+def add_replacement(path: Path, source: str, target: str) -> Dictionary:
+    """Teach a correction: ``source`` -> ``target``, persisted to the dictionary.
+
+    A multi-word source becomes a phrase rule (applied first, longest-first); a
+    single word becomes a word rule. Re-adding the same source updates its
+    target. This is the lightweight "never the same mistake twice" loop: correct
+    it once and the fix applies deterministically from then on.
+    """
+    source = source.strip()
+    if not source:
+        raise DictionaryError("correction source cannot be empty")
+    current = load(path)
+    is_phrase = " " in source
+    pairs = dict(current.phrases if is_phrase else current.words)
+    pairs[source] = target
+    updated = Dictionary(
+        vocab=current.vocab,
+        phrases=tuple(pairs.items()) if is_phrase else current.phrases,
+        punctuation=current.punctuation,
+        words=current.words if is_phrase else tuple(pairs.items()),
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(dumps(updated), encoding="utf-8")
+    return updated
+
+
 class ReplacementEngine:
     """Applies the layered deterministic replacements to a transcript."""
 

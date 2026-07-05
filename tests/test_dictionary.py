@@ -8,6 +8,7 @@ from whisper_flow_local.dictionary.replacements import (
     Dictionary,
     DictionaryError,
     ReplacementEngine,
+    add_replacement,
     dumps,
     initial_prompt,
     load,
@@ -114,6 +115,46 @@ def test_quick_add_creates_and_dedups(tmp_path) -> None:
 def test_quick_add_rejects_empty(tmp_path) -> None:
     with pytest.raises(DictionaryError):
         quick_add(tmp_path / "d.toml", "   ")
+
+
+# --- correction learning (add_replacement) -----------------------------------
+
+
+def test_add_replacement_single_word(tmp_path) -> None:
+    path = tmp_path / "dictionary.toml"
+    d = add_replacement(path, "gonna", "going to")
+    assert ("gonna", "going to") in d.words
+    # persisted and applied by the engine
+    assert ReplacementEngine(load(path)).apply("i am gonna go") == "i am going to go"
+
+
+def test_add_replacement_multiword_is_phrase(tmp_path) -> None:
+    path = tmp_path / "dictionary.toml"
+    d = add_replacement(path, "my sequel", "MySQL")
+    assert ("my sequel", "MySQL") in d.phrases
+    assert d.words == ()
+    assert ReplacementEngine(load(path)).apply("i use my sequel daily") == "i use MySQL daily"
+
+
+def test_add_replacement_updates_existing(tmp_path) -> None:
+    path = tmp_path / "dictionary.toml"
+    add_replacement(path, "gonna", "going to")
+    d = add_replacement(path, "gonna", "gunna")  # re-teach
+    words = dict(d.words)
+    assert words["gonna"] == "gunna"
+
+
+def test_add_replacement_preserves_other_tiers(tmp_path) -> None:
+    path = tmp_path / "dictionary.toml"
+    path.write_text('vocab = ["Kubernetes"]\n[punctuation]\n"period" = "."\n', encoding="utf-8")
+    d = add_replacement(path, "gonna", "going to")
+    assert d.vocab == ("Kubernetes",)
+    assert ("period", ".") in d.punctuation
+
+
+def test_add_replacement_rejects_empty(tmp_path) -> None:
+    with pytest.raises(DictionaryError):
+        add_replacement(tmp_path / "d.toml", "   ", "x")
 
 
 # --- ReplacementEngine (the layered ordering) --------------------------------
