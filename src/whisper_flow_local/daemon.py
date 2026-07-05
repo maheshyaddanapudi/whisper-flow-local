@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import signal
 import threading
-from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -18,7 +17,6 @@ from typing import Any
 from .controller import Controller
 from .hotkeys.base import HotkeyListener
 from .ipc import Dispatch, IPCError, IPCServer
-from .pipeline_state import State
 
 
 def make_dispatch(controller: Controller) -> Dispatch:
@@ -67,32 +65,35 @@ class Daemon:
         socket_path: Path,
         *,
         hotkey_listener: HotkeyListener | None = None,
-        ui_notify: Callable[[State], None] | None = None,
+        tray: Any = None,
     ) -> None:
         self._controller = controller
         self._server = IPCServer(socket_path, make_dispatch(controller))
         self._hotkey_listener = hotkey_listener
-        self._ui_notify = ui_notify
+        self._tray = tray
         self._stop = threading.Event()
 
     @property
     def controller(self) -> Controller:
         return self._controller
 
+    def attach_tray(self, tray: Any) -> None:
+        self._tray = tray
+
     def start(self) -> None:
         self._server.start()
         if self._hotkey_listener is not None:
             self._hotkey_listener.start()
+        if self._tray is not None:
+            self._tray.start()
 
     def stop(self) -> None:
         self._stop.set()
+        if self._tray is not None:
+            self._tray.stop()
         if self._hotkey_listener is not None:
             self._hotkey_listener.stop()
         self._server.stop()
-
-    def on_state_change(self, state: State) -> None:  # pragma: no cover - UI seam
-        if self._ui_notify is not None:
-            self._ui_notify(state)
 
     def run(self) -> None:  # pragma: no cover - blocks on signals; exercised manually
         self.start()

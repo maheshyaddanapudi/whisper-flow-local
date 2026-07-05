@@ -205,6 +205,32 @@ def test_paste_last_empty_history() -> None:
     assert ctl.paste_last().status == "noop"
 
 
+def test_paste_history_by_index() -> None:
+    ctl, _a, _s, injector, _h, _st = make_controller()
+    ctl.toggle()
+    ctl.toggle()  # dictation 1
+    ctl.toggle()
+    ctl.toggle()  # dictation 2
+    injector.requests.clear()
+    assert ctl.paste_history(0).status == "injected"  # most recent
+    assert ctl.paste_history(1).status == "injected"  # older
+    assert ctl.paste_history(5).status == "noop"  # out of range
+    assert len(injector.requests) == 2
+
+
+def test_recent_exposes_history() -> None:
+    ctl, *_ = make_controller()
+    ctl.toggle()
+    ctl.toggle()
+    assert len(ctl.recent()) == 1
+
+
+def test_paste_history_busy_when_active() -> None:
+    ctl, *_ = make_controller()
+    ctl.ptt_down()
+    assert ctl.paste_history(0).status == "busy"
+
+
 def test_paste_last_injection_failure() -> None:
     ctl, _a, _s, injector, *_ = make_controller(inject_ok=True)
     ctl.toggle()

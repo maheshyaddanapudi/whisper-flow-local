@@ -151,3 +151,24 @@ def test_daemon_manages_hotkey_listener(tmp_path) -> None:
     assert listener.started
     daemon.stop()
     assert listener.stopped
+
+
+def test_daemon_manages_tray(tmp_path) -> None:
+    class FakeTray:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+
+        def start(self) -> None:
+            self.started = True
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    tray = FakeTray()
+    daemon = Daemon(_controller(), tmp_path / "wf.sock")
+    daemon.attach_tray(tray)
+    daemon.start()
+    assert tray.started
+    daemon.stop()
+    assert tray.stopped

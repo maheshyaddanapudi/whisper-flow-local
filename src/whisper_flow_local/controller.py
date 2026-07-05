@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .audio import AudioSource
-from .history import History
+from .history import Dictation, History
 from .inject.base import AllInjectorsFailed, InjectionChain, InjectRequest
 from .pipeline_state import State, StateMachine
 from .profiles import NO_PROFILE, ActiveProfile
@@ -160,20 +160,34 @@ class Controller:
 
     def paste_last(self, *, raw: bool = False) -> DictationResult:
         with self._lock:
-            if self._sm.state != State.IDLE:
-                return DictationResult(status="busy", reason=self._sm.state.value)
             last = self._history.last
-            if last is None:
-                return DictationResult(status="noop", reason="no history")
-            text = last.raw if raw else last.text
-            # Out-of-band replay: inject directly without a pipeline run.
-            try:
-                backend = self._do_inject(text)
-            except AllInjectorsFailed as exc:
-                return DictationResult(status="error", reason=str(exc))
-            return DictationResult(
-                status="injected", raw=last.raw, cleaned=last.cleaned, backend=backend
-            )
+            return self._replay(last, raw=raw)
+
+    def paste_history(self, index: int) -> DictationResult:
+        """Re-inject a specific recent dictation by index (tray menu)."""
+        with self._lock:
+            recent = self._history.recent()
+            item = recent[index] if 0 <= index < len(recent) else None
+            return self._replay(item, raw=False)
+
+    def recent(self) -> list[Dictation]:
+        """Recent dictations (for the tray menu)."""
+        return self._history.recent()
+
+    def _replay(self, item: Dictation | None, *, raw: bool) -> DictationResult:
+        if self._sm.state != State.IDLE:
+            return DictationResult(status="busy", reason=self._sm.state.value)
+        if item is None:
+            return DictationResult(status="noop", reason="no history")
+        text = item.raw if raw else item.text
+        # Out-of-band replay: inject directly without a pipeline run.
+        try:
+            backend = self._do_inject(text)
+        except AllInjectorsFailed as exc:
+            return DictationResult(status="error", reason=str(exc))
+        return DictationResult(
+            status="injected", raw=item.raw, cleaned=item.cleaned, backend=backend
+        )
 
     # --- pipeline ---------------------------------------------------------
     def _apply_intent(self, intent: Intent, *, clean: bool = True) -> DictationResult:

@@ -87,13 +87,17 @@ def build_daemon(config: Config) -> Daemon:
     chain = build_injection_chain(list(config.get("inject.chain")), _build_injectors(clipboard))
     audio = SoundDeviceSource(int(config.get("audio.sample_rate")), str(config.get("audio.device")))
     from .frontmost import detect as detect_frontmost
+    from .notifier import StateNotifier
     from .transparency import TransparencyLog
+    from .ui.cues import make_cue_hooks, system_player
 
     log = TransparencyLog(int(config.get("transparency.size")))
     record = log.record if bool(config.get("transparency.enabled")) else None
     engine = build_cleanup_engine(config, record=record)
     dictionary = build_dictionary(config)
     profiles = build_profiles(config)
+    notifier = StateNotifier()
+    notify = make_cue_hooks(system_player()) if bool(config.get("audio.cues")) else {}
     deps = _Deps(
         audio=audio,
         stt=_build_stt(config),
@@ -105,9 +109,18 @@ def build_daemon(config: Config) -> Daemon:
         get_selection=make_selection_reader(clipboard),
         resolve_profile=build_profile_resolver(profiles, detect_frontmost),
         transparency=log if bool(config.get("transparency.enabled")) else None,
+        on_state_change=notifier,
+        notify=notify,
     )
     controller = Controller(build_controller_config(config, dictionary), deps)
     listener = None
     if str(config.get("hotkey.backend")) != "none":
         listener = _build_hotkey_listener(config, controller)
-    return Daemon(controller, default_socket_path(), hotkey_listener=listener)
+    daemon = Daemon(controller, default_socket_path(), hotkey_listener=listener)
+    if bool(config.get("ui.enabled")):
+        from .ui.tray import TrayApp
+
+        tray = TrayApp(controller, on_quit=daemon.stop)
+        notifier.register(tray.on_state_change)
+        daemon.attach_tray(tray)
+    return daemon

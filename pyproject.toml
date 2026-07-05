@@ -113,6 +113,7 @@ omit = [
     "src/whisper_flow_local/inject/system.py",
     "src/whisper_flow_local/hotkeys/pynput_listener.py",
     "src/whisper_flow_local/build.py",
+    "src/whisper_flow_local/ui/tray.py",
 ]
 
 [tool.coverage.report]
