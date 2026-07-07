@@ -381,6 +381,12 @@ SCHEMA: tuple[Option, ...] = (
     ),
     # [ui]
     Option("ui.enabled", "bool", True, "Show the tray icon and status overlay."),
+    Option(
+        "ui.overlay",
+        "bool",
+        True,
+        "Show the live dictation overlay widget (transcript + streaming refinement).",
+    ),
 )
 
 _SCHEMA_BY_KEY: dict[str, Option] = {opt.key: opt for opt in SCHEMA}

@@ -114,6 +114,7 @@ omit = [
     "src/whisper_flow_local/hotkeys/pynput_listener.py",
     "src/whisper_flow_local/build.py",
     "src/whisper_flow_local/ui/tray.py",
+    "src/whisper_flow_local/ui/overlay_window.py",
 ]
 
 [tool.coverage.report]

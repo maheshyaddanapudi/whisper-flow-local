@@ -58,3 +58,4 @@ environment variable > config file > default.
 | `transparency.enabled` | `WHISPER_FLOW_TRANSPARENCY_ENABLED` | bool | `true` |  | Keep an in-memory log of exactly what was sent to the local LLM. |
 | `transparency.size` | `WHISPER_FLOW_TRANSPARENCY_SIZE` | int | `20` |  | How many recent LLM calls to keep (in memory only, never persisted). |
 | `ui.enabled` | `WHISPER_FLOW_UI_ENABLED` | bool | `true` |  | Show the tray icon and status overlay. |
+| `ui.overlay` | `WHISPER_FLOW_UI_OVERLAY` | bool | `true` |  | Show the live dictation overlay widget (transcript + streaming refinement). |

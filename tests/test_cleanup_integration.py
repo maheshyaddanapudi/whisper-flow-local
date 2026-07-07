@@ -8,6 +8,8 @@ from whisper_flow_local.cleanup.prompts import CleanupGoals
 from whisper_flow_local.controller import Controller, ControllerConfig, _Deps
 from whisper_flow_local.history import History
 from whisper_flow_local.inject.base import InjectionChain
+from whisper_flow_local.notifier import StateNotifier
+from whisper_flow_local.ui.overlay import OverlayController, OverlayView
 
 RAW = "um so this is a fairly long dictated sentence that should be cleaned up now"
 
@@ -59,6 +61,57 @@ def test_raw_intent_skips_cleanup(mock_ollama) -> None:
     assert result.cleaned == ""
     assert injector.requests[0].text == RAW
     assert called == []  # Ollama never contacted
+
+
+def test_overlay_streams_refinement_over_full_pipeline(mock_ollama) -> None:
+    """Press → record → transcribe → stream cleanup into the overlay → inject → hide.
+
+    Wires the live overlay exactly as ``build_daemon`` does: the engine streams
+    tokens to ``OverlayController.on_token`` and the controller's state changes
+    drive the widget through a StateNotifier.
+    """
+    mock_ollama.chat_response = lambda text: "This is a cleaned sentence."
+
+    class Surface:
+        def __init__(self) -> None:
+            self.views: list[OverlayView] = []
+
+        def render(self, view: OverlayView) -> None:
+            self.views.append(view)
+
+    surface = Surface()
+    overlay = OverlayController(surface)
+    engine = CleanupEngine(
+        host=mock_ollama.host,
+        model="gemma3:4b",
+        goals=CleanupGoals(),
+        on_token=overlay.on_token,
+    )
+    notifier = StateNotifier()
+    notifier.register(overlay.on_state)
+    injector = FakeInjector("fake")
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT(RAW),
+        injection=InjectionChain([injector]),
+        history=History(size=5),
+        cleanup=engine.clean,
+        on_state_change=notifier,
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15, cleanup_min_chars=50), deps)
+    overlay.bind_stop(ctl.cancel)
+
+    ctl.toggle()  # press: recording -> overlay shows
+    assert surface.views[-1].visible is True
+    result = ctl.toggle()  # release: transcribe -> stream cleanup -> inject -> idle
+
+    assert result.status == "injected"
+    assert injector.requests[0].text == "This is a cleaned sentence."
+    # The overlay saw the refinement stream token-by-token, then hid at idle.
+    streamed = [v.refined for v in surface.views if v.refined]
+    assert streamed[-1] == "This is a cleaned sentence."
+    assert len(streamed) >= 2  # arrived in pieces, not one shot
+    assert surface.views[-1].visible is False
 
 
 def test_short_utterance_skips_cleanup(mock_ollama) -> None:

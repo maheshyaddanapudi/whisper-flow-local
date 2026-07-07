@@ -188,7 +188,7 @@ CI.
 
 ## Phase 5 — Differentiators 🟢 all 6 built (logic complete)
 
-**Automated.** 409 tests, **100% line+branch coverage**; ruff + strict mypy clean.
+**Automated.** 429 tests, **100% line+branch coverage**; ruff + strict mypy clean.
 
 **Built and tested (with end-to-end demos against the real mock Ollama where
 applicable):**
@@ -208,10 +208,21 @@ applicable):**
 - **Streaming partial-preview coordinator** — the two-tier logic (fast-model
   partials, deduped + error-swallowed, reset between utterances) is tested;
   feeding it live growing audio and rendering the overlay are the device seam.
+- **Live overlay widget + streaming refinement** — on the hotkey press the
+  daemon enters `recording` and the overlay coordinator (`ui/overlay.py`) shows
+  the widget, mirrors the live partial transcript, then streams the LLM's
+  cleanup **token-by-token** (`cleanup.chat_stream` → `CleanupEngine.on_token`)
+  while `cleaning`, and hides on `idle`; a Stop control aborts the dictation
+  (wired to `controller.cancel`). All of that is tested over a fake surface and
+  a streaming mock Ollama; only the tkinter window (`ui/overlay_window.py`) is
+  the device seam. The streaming client is verified end-to-end against the mock
+  server (token emission, blank-line/EOF handling, mid-flight failure → raw
+  fallback).
 
 **What remains device-only (not a logic gap — the pixels/IO themselves):**
-- Tray icon rendering, preview overlay rendering, the sound playback, and
-  feeding the streaming coordinator from a live mic — all need a real desktop.
+- Tray icon rendering, the tkinter overlay window rendering, the sound playback,
+  and feeding the streaming coordinator from a live mic — all need a real
+  desktop.
 - **Fully automatic edit-watching** (infer corrections by silently monitoring
   everything you retype) is deliberately **not** built: it is keylogger-shaped
   and privacy-hostile. `correct --last` is the safe, explicit equivalent.

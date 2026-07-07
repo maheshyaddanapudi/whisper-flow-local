@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -105,3 +106,53 @@ def chat(
     if not isinstance(content, str):
         raise OllamaError("ollama chat returned no message content")
     return content
+
+
+def chat_stream(
+    host: str,
+    model: str,
+    system: str,
+    user: str,
+    on_token: Callable[[str], None],
+    *,
+    keep_alive: str = "30m",
+    timeout: float = 8.0,
+    temperature: float = 0.0,
+) -> str:
+    """Streaming ``POST /api/chat``: calls ``on_token`` per chunk, returns the full text.
+
+    Ollama streams newline-delimited JSON, each line carrying a ``message.content``
+    fragment. Raises :class:`OllamaError` on any transport/decode failure.
+    """
+    url = host.rstrip("/") + "/api/chat"
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "stream": True,
+        "keep_alive": keep_alive,
+        "options": {"temperature": temperature},
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url, data=data, headers={"Content-Type": "application/json"}, method="POST"
+    )
+    parts: list[str] = []
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            for raw_line in resp:
+                line = raw_line.decode("utf-8").strip()
+                if not line:
+                    continue
+                obj = json.loads(line)
+                token = obj.get("message", {}).get("content", "") if isinstance(obj, dict) else ""
+                if token:
+                    parts.append(token)
+                    on_token(token)
+                if isinstance(obj, dict) and obj.get("done"):
+                    break
+    except (urllib.error.URLError, OSError, ValueError) as exc:
+        raise OllamaError(f"ollama stream failed: {exc}") from exc
+    return "".join(parts)

@@ -172,3 +172,24 @@ def test_daemon_manages_tray(tmp_path) -> None:
     assert tray.started
     daemon.stop()
     assert tray.stopped
+
+
+def test_daemon_manages_overlay(tmp_path) -> None:
+    class FakeOverlay:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+
+        def start(self) -> None:
+            self.started = True
+
+        def stop(self) -> None:
+            self.stopped = True
+
+    overlay = FakeOverlay()
+    daemon = Daemon(_controller(), tmp_path / "wf.sock")
+    daemon.attach_overlay(overlay)
+    daemon.start()
+    assert overlay.started
+    daemon.stop()
+    assert overlay.stopped

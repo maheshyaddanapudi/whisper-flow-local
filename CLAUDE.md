@@ -106,11 +106,13 @@ around these — grant them or accept the degraded mode.
 - **The plan has SIX phases (0–5), ALL BUILT at the logic level.** Phase 5's six
   differentiators are all implemented (command mode, per-app profiles,
   transparency log, correction-learning incl. `--last`, tray/cues, streaming-
-  preview coordinator). What is NOT verified is **device I/O** (real mic, hotkey,
-  model inference, paste, and the tray/overlay/sound rendering) — those need a
-  real desktop. The only deliberately-unbuilt item is fully automatic
-  edit-watching (privacy-hostile; `correct --last` is the safe equivalent).
-- ~410 tests, 100% coverage, gate green, wheel builds.
+  preview coordinator), plus a **live overlay widget** with **streaming Ollama
+  refinement** (transcript + token-by-token cleanup + Stop control). What is NOT
+  verified is **device I/O** (real mic, hotkey, model inference, paste, and the
+  tray/overlay/sound rendering) — those need a real desktop. The only
+  deliberately-unbuilt item is fully automatic edit-watching (privacy-hostile;
+  `correct --last` is the safe equivalent).
+- ~429 tests, 100% coverage, gate green, wheel builds.
 - **Verified in CI/headless:** all logic, plus a full assembly of the real
   `build_daemon` with physical devices faked, and the cleanup pass against a real
   mock Ollama HTTP server (incl. kill-mid-flight → raw fallback).
@@ -122,6 +124,11 @@ around these — grant them or accept the degraded mode.
   - Tray icon + overlay + audio cues: menu/badge/cue *logic* tested (`ui/menu.py`,
     `ui/status.py`, `ui/cues.py`); pystray/Pillow/sound rendering is the seam
     (`ui/tray.py`, omitted).
+  - Live overlay: the `OverlayController` in `ui/overlay.py` (state → transcript
+    → streaming refinement → `OverlayView`, + Stop) is tested; the tkinter window
+    `ui/overlay_window.py` is the seam (omitted). Streaming cleanup flows through
+    `cleanup/ollama.py::chat_stream` → `CleanupEngine.on_token`, tested against
+    the streaming mock Ollama. Config: `ui.overlay`.
   - Streaming preview: `stt/preview.py` coordinator tested; the live mic feed +
     overlay draw are the seam. Same for `VadCapture`/`Endpointer` continuous loop.
 - **Deliberately NOT built:**

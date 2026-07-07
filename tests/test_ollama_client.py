@@ -4,7 +4,14 @@ from __future__ import annotations
 
 import pytest
 
-from whisper_flow_local.cleanup.ollama import OllamaStatus, has_model, list_models, probe
+from whisper_flow_local.cleanup.ollama import (
+    OllamaError,
+    OllamaStatus,
+    chat_stream,
+    has_model,
+    list_models,
+    probe,
+)
 
 
 def test_list_models(mock_ollama) -> None:
@@ -62,3 +69,39 @@ def test_list_models_filters_malformed_entries(mock_ollama) -> None:
         {"name": 123},  # name not a string
     ]
     assert list_models(mock_ollama.host) == ["good:latest"]
+
+
+# --- Streaming chat ----------------------------------------------------------
+
+
+def test_chat_stream_emits_tokens_and_returns_full(mock_ollama) -> None:
+    mock_ollama.chat_response = lambda text: "Cleaned up sentence."
+    tokens: list[str] = []
+    out = chat_stream(mock_ollama.host, "gemma3:4b", "system", "raw", tokens.append, timeout=2.0)
+    # Each space-split chunk arrives via on_token; the return is the full text.
+    assert out == "Cleaned up sentence."
+    assert "".join(tokens) == "Cleaned up sentence."
+    assert len(tokens) >= 2  # streamed in pieces, not one shot
+    assert mock_ollama.requests[-1]["body"]["stream"] is True
+
+
+def test_chat_stream_server_error_raises(mock_ollama) -> None:
+    mock_ollama.fail_chat = True
+    with pytest.raises(OllamaError, match="stream failed"):
+        chat_stream(mock_ollama.host, "m", "s", "u", lambda _t: None, timeout=2.0)
+
+
+def test_chat_stream_unreachable_raises() -> None:
+    with pytest.raises(OllamaError):
+        chat_stream("http://127.0.0.1:1", "m", "s", "u", lambda _t: None, timeout=0.5)
+
+
+def test_chat_stream_handles_blank_lines_and_eof_end(mock_ollama) -> None:
+    # A stream that emits a blank keep-alive line and ends via EOF (no done
+    # marker) must still reconstruct the full text without hanging.
+    mock_ollama.chat_response = lambda text: "Two words"
+    mock_ollama.stream_eof_no_done = True
+    tokens: list[str] = []
+    out = chat_stream(mock_ollama.host, "m", "s", "u", tokens.append, timeout=2.0)
+    assert out == "Two words"
+    assert "".join(tokens) == "Two words"

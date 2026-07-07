@@ -184,6 +184,74 @@ ADVERSARIAL = [
 ]
 
 
+# --- Streaming (live overlay) path -------------------------------------------
+
+
+def _fake_stream(text: str):
+    """A chat_stream that emits ``text`` in word chunks via on_token."""
+
+    def stream(host, model, system, user, on_token, **kw):
+        chunks = text.split(" ")
+        for i, chunk in enumerate(chunks):
+            on_token(chunk if i == len(chunks) - 1 else chunk + " ")
+        return text
+
+    return stream
+
+
+def test_engine_clean_streams_tokens_when_on_token_set() -> None:
+    tokens: list[str] = []
+    plain_called: list[int] = []
+    eng = CleanupEngine(
+        host="h",
+        model="m",
+        goals=CleanupGoals(),
+        chat=lambda *a, **k: plain_called.append(1) or "SHOULD-NOT-BE-USED",
+        chat_stream=_fake_stream("Cleaned up sentence."),
+        on_token=tokens.append,
+    )
+    assert eng.clean("um cleaned up sentence") == "Cleaned up sentence."
+    assert "".join(tokens) == "Cleaned up sentence."
+    assert plain_called == []  # streamed, never the non-streaming client
+
+
+def test_engine_instruct_streams_tokens_when_on_token_set() -> None:
+    tokens: list[str] = []
+    eng = CleanupEngine(
+        host="h",
+        model="m",
+        goals=CleanupGoals(),
+        chat_stream=_fake_stream("Dear Sir or Madam,"),
+        on_token=tokens.append,
+    )
+    assert eng.instruct("make formal", "hey") == "Dear Sir or Madam,"
+    assert "".join(tokens) == "Dear Sir or Madam,"
+
+
+def test_engine_streaming_failure_still_falls_back() -> None:
+    def boom(*a, **k):
+        raise OllamaError("stream died mid-flight")
+
+    eng = CleanupEngine(
+        host="h", model="m", goals=CleanupGoals(), chat_stream=boom, on_token=lambda _t: None
+    )
+    assert eng.clean("a reasonably long raw transcript") == ""
+
+
+def test_engine_without_on_token_uses_plain_chat() -> None:
+    # No overlay attached -> the non-streaming client is used, stream is not.
+    stream_called: list[int] = []
+    eng = CleanupEngine(
+        host="h",
+        model="m",
+        goals=CleanupGoals(),
+        chat=lambda *a, **k: "Cleaned.",
+        chat_stream=lambda *a, **k: stream_called.append(1) or "x",
+    )
+    assert eng.clean("um raw text to clean") == "Cleaned."
+    assert stream_called == []
+
+
 @pytest.mark.parametrize("transcript", ADVERSARIAL)
 def test_adversarial_expansion_falls_back_to_raw(mock_ollama, transcript: str) -> None:
     # Simulate a "helpful" model that answers at length.

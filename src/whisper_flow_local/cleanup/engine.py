@@ -16,6 +16,7 @@ from collections.abc import Callable
 
 from .ollama import OllamaError
 from .ollama import chat as _default_chat
+from .ollama import chat_stream as _default_chat_stream
 from .prompts import (
     CleanupGoals,
     build_instruction_message,
@@ -24,8 +25,11 @@ from .prompts import (
 )
 
 ChatFn = Callable[..., str]
+StreamChatFn = Callable[..., str]
 # (kind, system, user, output) recorded for the transparency log.
 RecordFn = Callable[[str, str, str, str], None]
+# A single streamed token, for the live overlay.
+TokenFn = Callable[[str], None]
 
 
 class CleanupEngine:
@@ -41,7 +45,9 @@ class CleanupEngine:
         timeout: float = 8.0,
         max_growth_ratio: float = 2.5,
         chat: ChatFn = _default_chat,
+        chat_stream: StreamChatFn = _default_chat_stream,
         record: RecordFn | None = None,
+        on_token: TokenFn | None = None,
     ) -> None:
         self._host = host
         self._model = model
@@ -51,8 +57,11 @@ class CleanupEngine:
         self._timeout = timeout
         self._max_growth_ratio = max_growth_ratio
         self._chat = chat
+        self._chat_stream = chat_stream
         # Transparency: called with (kind, system, user, output) after each call.
         self._record = record or (lambda *_a: None)
+        # Live overlay: when set, completions stream token-by-token.
+        self._on_token = on_token
 
     @property
     def system_prompt(self) -> str:
@@ -62,6 +71,32 @@ class CleanupEngine:
     def instruction_prompt(self) -> str:
         return self._instruction_system
 
+    def _complete(self, system: str, user: str) -> str:
+        """Run one completion, streaming token-by-token when an overlay is attached.
+
+        Both paths raise :class:`OllamaError` on failure and return the full
+        assistant text; the only difference is whether ``on_token`` fires as the
+        model produces the text (for the live overlay).
+        """
+        if self._on_token is not None:
+            return self._chat_stream(
+                self._host,
+                self._model,
+                system,
+                user,
+                self._on_token,
+                keep_alive=self._keep_alive,
+                timeout=self._timeout,
+            )
+        return self._chat(
+            self._host,
+            self._model,
+            system,
+            user,
+            keep_alive=self._keep_alive,
+            timeout=self._timeout,
+        )
+
     def clean(self, raw: str, system_override: str = "") -> str:
         """Return cleaned text, or ``""`` to signal "fall back to raw".
 
@@ -70,14 +105,7 @@ class CleanupEngine:
         """
         system = system_override.strip() or self._system
         try:
-            out = self._chat(
-                self._host,
-                self._model,
-                system,
-                raw,
-                keep_alive=self._keep_alive,
-                timeout=self._timeout,
-            )
+            out = self._complete(system, raw)
         except OllamaError:
             return ""
         self._record("cleanup", system, raw, out)
@@ -98,14 +126,7 @@ class CleanupEngine:
             return ""
         message = build_instruction_message(instruction, text)
         try:
-            out = self._chat(
-                self._host,
-                self._model,
-                self._instruction_system,
-                message,
-                keep_alive=self._keep_alive,
-                timeout=self._timeout,
-            )
+            out = self._complete(self._instruction_system, message)
         except OllamaError:
             return ""
         self._record("command", self._instruction_system, message, out)

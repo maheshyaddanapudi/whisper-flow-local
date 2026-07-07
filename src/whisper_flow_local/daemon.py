@@ -66,11 +66,13 @@ class Daemon:
         *,
         hotkey_listener: HotkeyListener | None = None,
         tray: Any = None,
+        overlay: Any = None,
     ) -> None:
         self._controller = controller
         self._server = IPCServer(socket_path, make_dispatch(controller))
         self._hotkey_listener = hotkey_listener
         self._tray = tray
+        self._overlay = overlay
         self._stop = threading.Event()
 
     @property
@@ -80,15 +82,22 @@ class Daemon:
     def attach_tray(self, tray: Any) -> None:
         self._tray = tray
 
+    def attach_overlay(self, overlay: Any) -> None:
+        self._overlay = overlay
+
     def start(self) -> None:
         self._server.start()
         if self._hotkey_listener is not None:
             self._hotkey_listener.start()
         if self._tray is not None:
             self._tray.start()
+        if self._overlay is not None:
+            self._overlay.start()
 
     def stop(self) -> None:
         self._stop.set()
+        if self._overlay is not None:
+            self._overlay.stop()
         if self._tray is not None:
             self._tray.stop()
         if self._hotkey_listener is not None:

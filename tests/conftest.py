@@ -31,6 +31,9 @@ class MockOllama:
     fail_tags: bool = False
     fail_chat: bool = False
     chat_no_content: bool = False  # return a 200 lacking message.content
+    # Stream a blank keep-alive line and end via EOF (no {"done": true} marker),
+    # exercising the client's blank-line skip and natural loop exit.
+    stream_eof_no_done: bool = False
     requests: list[dict] = field(default_factory=list)
 
 
@@ -78,6 +81,9 @@ def _make_handler(state: MockOllama) -> type[BaseHTTPRequestHandler]:
                 messages = body.get("messages", [])
                 user_text = messages[-1]["content"] if messages else ""
                 out = state.chat_response(user_text)
+                if body.get("stream"):
+                    self._send_stream(out)
+                    return
                 self._send(
                     200,
                     {
@@ -87,6 +93,22 @@ def _make_handler(state: MockOllama) -> type[BaseHTTPRequestHandler]:
                 )
             else:
                 self._send(404, {"error": "not found"})
+
+        def _send_stream(self, out: str) -> None:
+            # Ollama streams newline-delimited JSON, one token chunk per line.
+            self.send_response(200)
+            self.send_header("Content-Type", "application/x-ndjson")
+            self.end_headers()
+            tokens = out.split(" ")
+            for i, tok in enumerate(tokens):
+                chunk = tok if i == len(tokens) - 1 else tok + " "
+                line = json.dumps({"message": {"content": chunk}, "done": False}) + "\n"
+                self.wfile.write(line.encode("utf-8"))
+            if state.stream_eof_no_done:
+                self.wfile.write(b"\n")  # blank keep-alive line; then EOF, no done
+                return
+            done = json.dumps({"message": {"content": ""}, "done": True}) + "\n"
+            self.wfile.write(done.encode("utf-8"))
 
     return Handler
 

@@ -93,7 +93,19 @@ def build_daemon(config: Config) -> Daemon:
 
     log = TransparencyLog(int(config.get("transparency.size")))
     record = log.record if bool(config.get("transparency.enabled")) else None
-    engine = build_cleanup_engine(config, record=record)
+    # The live overlay (if enabled) shows the transcript and streams the LLM
+    # refinement token-by-token; it registers for state changes below.
+    overlay_ctl = None
+    overlay_window = None
+    if bool(config.get("ui.overlay")):
+        from .ui.overlay import OverlayController
+        from .ui.overlay_window import OverlayWindow
+
+        overlay_window = OverlayWindow()
+        overlay_ctl = OverlayController(overlay_window, on_stop=None)
+        overlay_window.bind(overlay_ctl)
+    on_token = overlay_ctl.on_token if overlay_ctl is not None else None
+    engine = build_cleanup_engine(config, record=record, on_token=on_token)
     dictionary = build_dictionary(config)
     profiles = build_profiles(config)
     notifier = StateNotifier()
@@ -123,4 +135,10 @@ def build_daemon(config: Config) -> Daemon:
         tray = TrayApp(controller, on_quit=daemon.stop)
         notifier.register(tray.on_state_change)
         daemon.attach_tray(tray)
+    if overlay_ctl is not None:
+        # The stop control aborts the current dictation; state changes drive the
+        # widget's visibility/labels; the mic feed and refinement stream update it.
+        overlay_ctl.bind_stop(controller.cancel)
+        notifier.register(overlay_ctl.on_state)
+        daemon.attach_overlay(overlay_window)
     return daemon

@@ -73,6 +73,17 @@ def test_build_cleanup_engine_disabled() -> None:
     assert build_cleanup_engine(cfg) is None
 
 
+def test_build_cleanup_engine_streams_when_on_token_given() -> None:
+    tokens: list[str] = []
+    engine = build_cleanup_engine(Config(), on_token=tokens.append)
+    assert engine is not None
+    # The engine routes completions through the streaming client; drive it with a
+    # fake stream to prove on_token is wired through.
+    engine._chat_stream = lambda *a, **k: (a[4]("Hi."), "Hi.")[1]  # a[4] is on_token
+    assert engine.clean("um a reasonably long transcript to clean up here") == "Hi."
+    assert tokens == ["Hi."]
+
+
 def test_build_cleanup_engine_respects_goals() -> None:
     cfg = Config()
     cfg.data["cleanup"]["goal_fillers"] = False

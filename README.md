@@ -15,13 +15,15 @@ never sends your voice off the machine.
 > with snapshot/restore, personal dictionary, two-layer VAD, cross-platform
 > injection, packaging — plus the Phase 5 differentiators: command/instruction
 > mode, per-app tone profiles, transparency log, correction-learning (explicit
-> and from-your-last-fix), the menu-bar tray, and the streaming-preview
-> coordinator. What remains is **device I/O only** — real mic, global hotkey,
-> model inference, paste into a focused app, and the tray/overlay/sound
-> *rendering* — which needs a real desktop to verify (the logic behind each is
-> tested with fakes). See [docs/VERIFICATION.md](docs/VERIFICATION.md) for the
-> exact CI-vs-device line. The one intentionally-unbuilt item is silent
-> edit-watching (privacy-hostile); `correct --last` is the safe equivalent.
+> and from-your-last-fix), the menu-bar tray, the streaming-preview coordinator,
+> and a **live overlay widget** that shows the transcript and streams the LLM
+> cleanup token-by-token while it runs. What remains is **device I/O only** —
+> real mic, global hotkey, model inference, paste into a focused app, and the
+> tray/overlay/sound *rendering* — which needs a real desktop to verify (the
+> logic behind each is tested with fakes). See
+> [docs/VERIFICATION.md](docs/VERIFICATION.md) for the exact CI-vs-device line.
+> The one intentionally-unbuilt item is silent edit-watching (privacy-hostile);
+> `correct --last` is the safe equivalent.
 
 ## Install
 
@@ -121,6 +123,16 @@ injected instead. Skip it per-utterance with `--raw`, or disable it with
 text injection), **copy-only** (text placed on the clipboard — ideal for
 locked-down corporate machines where you can't grant Accessibility), or
 **not-ready** (install an STT backend).
+
+### Live overlay
+
+When you press the hotkey, a small always-on-top widget appears near the bottom
+of the screen. It shows the live partial transcript as you speak, then streams
+the LLM's cleanup **token-by-token** while it refines — so you watch the text
+tidy itself in real time — and disappears once the result is inserted. A **Stop**
+button aborts the dictation at any point. It's on by default; turn it off with
+`ui.overlay = false` (headless/daemon-only setups don't need it). The window is
+a plain overlay the running daemon shows and hides — not a separate app.
 
 ### macOS permissions
 

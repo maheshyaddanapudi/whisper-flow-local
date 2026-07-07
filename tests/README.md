@@ -23,6 +23,13 @@ importing them requires physical devices absent in CI. Any excluded line must be
 a trivial pass-through to the third-party library; logic lives on the testable
 side of the seam.
 
+The UI rendering adapters are the same kind of seam: `ui/tray.py` (pystray/
+Pillow) and `ui/overlay_window.py` (the always-on-top tkinter dictation widget)
+are excluded, while their decisions live in tested modules — `ui/menu.py`,
+`ui/status.py`, and the `OverlayController` in `ui/overlay.py`, which turns
+pipeline state + live partials + streaming refinement tokens into the immutable
+`OverlayView` the window draws.
+
 **Adversarial cleanup suite:** `test_cleanup_contract.py` feeds transcripts that
 tempt an LLM to answer questions, summarize, or drop content, and asserts the
 prompt/guard contract holds ("clean, never transform meaning").
