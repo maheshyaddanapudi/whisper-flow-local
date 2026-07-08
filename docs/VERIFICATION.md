@@ -21,9 +21,15 @@ The plan (`docs/PLAN.md`) has **six phases, 0–5**.
 | 4 | Cross-platform hardening | ✅ logic + assembly complete; device I/O pending |
 | 5 | Differentiators (command mode, per-app tone, etc.) | 🟢 all 6 built (logic); live-IO/rendering on device |
 
-"Complete" means logic at 100% coverage + assembled; it does **not** mean run on
-real hardware. The device-I/O paths (mic, hotkey, model inference, paste, tray)
-are wired but only verifiable on a real desktop. **Phase 5 is not finished.**
+"Complete" means logic at 100% coverage + assembled. Beyond that, the
+device-I/O paths have now been run **for real against virtual devices** (see
+"Real-device verification session" below): real STT models (both backends),
+real pynput hotkey on X11, real clipboard/keystroke injection into a live
+focused app, real PortAudio capture from a virtual mic, the real tkinter
+overlay under Xvfb, and a robot-user E2E chaining all of it through the real
+daemon. What still needs the physical Mac is the macOS-specific layer only
+(pbcopy/cmd+v, aqua window style, Metal speed, permission prompts, tray) and a
+physical microphone.
 
 ---
 
@@ -188,7 +194,7 @@ CI.
 
 ## Phase 5 — Differentiators 🟢 all 6 built (logic complete)
 
-**Automated.** 438 tests, **100% line+branch coverage**; ruff + strict mypy clean.
+**Automated.** 444 tests, **100% line+branch coverage**; ruff + strict mypy clean.
 
 **Built and tested (with end-to-end demos against the real mock Ollama where
 applicable):**
@@ -247,10 +253,67 @@ a display exists (the macOS CI leg runs real Tk) and asserts the graceful
 degrade contract where none does. `scripts/overlay_demo.py` shows the widget
 with scripted data on any machine — run it first on a new desktop.
 
-**What remains device-only (not a logic gap — the pixels/IO themselves):**
-- macOS-native rendering details (the aqua borderless "help" window style,
-  Retina font metrics), tray icon rendering, sound playback, and feeding the
-  streaming-preview coordinator from a live mic — these need the real Mac.
+---
+
+## Real-device verification session (virtual devices, this container)
+
+The challenge "are you sure you can't verify the device seams before I do?"
+turned out to be right: with virtual devices (Xvfb, a PulseAudio null-sink
+mic, espeak-synthesized speech, xdotool key events), every non-macOS adapter
+was executed **for real**. Scripts committed under `scripts/verify_linux/`.
+
+**All green:**
+- **Real STT, both backends.** `FasterWhisperBackend` (tiny.en, CPU int8):
+  model downloaded from HF, real inference, warm 1.3 s for 6.4 s audio,
+  deterministic at temperature 0. `WhisperCppBackend` (pywhispercpp): same
+  audio, correct transcript — this is the exact adapter macOS uses (there with
+  Metal). `whisper-flow bench --audio …` rendered a real benchmark table.
+- **Real global hotkey.** `PynputHotkeyListener` caught a genuine X11
+  ctrl+shift+space press AND release fired by xdotool.
+- **Real injection into a real app.** The production chain from
+  `_build_injectors` (which correctly auto-detected X11 and selected xdotool)
+  pasted into a live, focused tkinter editor via the real clipboard
+  (xclip) + real pynput ctrl+v: text landed, the user's prior clipboard was
+  restored, **no Enter was sent**. The xdotool keystroke injector verified too.
+- **Real audio capture.** `SoundDeviceSource` (PortAudio) recorded 6.8 s from
+  a PulseAudio virtual mic while the speech WAV played into it — real stream
+  callback, real frame concatenation, device-substring resolution — and real
+  Whisper transcribed the captured audio correctly.
+- **Robot-user E2E.** All of the above chained: xdotool holds the hotkey →
+  real pynput → real Daemon + Unix-socket IPC → speech "recorded" → real
+  faster-whisper (which genuinely misheard "noon" as "new") → the **real
+  dictionary replacement fixed the real mishearing** → cleanup streamed 16
+  tokens over HTTP → real clipboard-paste into the focused editor →
+  clipboard restored. `status` over the real socket confirmed idle +
+  history=1 with the cleaned text.
+- **`doctor` on this machine** reports every row correctly, including the new
+  tkinter row flagging this venv's missing tkinter with the brew hint.
+
+**Production bug found by this session (fixed):** the pynput adapter ran the
+entire pipeline on pynput's own callback thread. On macOS the OS *disables an
+event tap whose callback blocks* (~1 s) — the hotkey would have died after the
+first dictation — and pasting keystrokes from inside the blocked listener
+thread can deadlock X11 (observed: the robot E2E hung). Fix:
+`dispatch.SerialDispatcher` (tested) — callbacks now capture the event
+timestamp and hand the handler to a worker thread, preserving press/release
+order; a handler error can never kill the input listener.
+
+**Observation, not a bug:** the hotkey's own keystroke reaches the focused app
+(the space in ctrl+shift+space inserted a leading space in the victim editor).
+Pick a hotkey chord the target apps ignore, or accept the artifact; suppressing
+global keys system-wide is deliberately out of scope.
+
+**Could not verify here (environment network policy blocks the downloads):**
+a real Ollama server — `ollama.com` and GitHub release binaries return 403
+through the proxy. The client speaks Ollama's documented `/api/chat` NDJSON
+protocol and is exercised against a protocol-faithful mock (streaming,
+blank-line keep-alives, EOF-without-done, mid-flight failure, abort).
+
+**What genuinely remains for the Mac (macOS-specific by nature):**
+- macOS adapters: pbcopy/pbpaste clipboard, cmd+v paste into a macOS app, the
+  aqua borderless "help" window style, whisper.cpp **Metal** speed, macOS
+  permission prompts (mic / Input Monitoring / Accessibility), menu-bar tray.
+- A physical microphone and real human speech.
 - **Fully automatic edit-watching** (infer corrections by silently monitoring
   everything you retype) is deliberately **not** built: it is keylogger-shaped
   and privacy-hostile. `correct --last` is the safe, explicit equivalent.

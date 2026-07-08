@@ -4,6 +4,13 @@ Tracks modifier state and fires press/release callbacks (with a monotonic
 timestamp) when the configured combo's main key goes down/up while the required
 modifiers are held. The hybrid tap/hold interpretation lives in
 ``recording.RecordingResolver`` — this only reports raw press/release.
+
+CRITICAL: handlers run on a :class:`SerialDispatcher` worker, never on pynput's
+own callback thread. macOS disables an event tap whose callback blocks, and the
+pipeline (STT + LLM + paste keystrokes) takes seconds — running it in the
+callback froze the hotkey after one dictation and could deadlock the paste.
+The timestamp is captured in the callback (event time), so tap-vs-hold
+semantics are unaffected by dispatch latency.
 """
 
 from __future__ import annotations
@@ -12,6 +19,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from ..dispatch import SerialDispatcher
 from .base import Hotkey
 
 _MOD_KEYS = {
@@ -39,6 +47,7 @@ class PynputHotkeyListener:
         self._held_mods: set[str] = set()
         self._active = False
         self._listener: Any = None
+        self._dispatch = SerialDispatcher()
 
     def _key_name(self, key: Any) -> str:
         from pynput import keyboard
@@ -70,18 +79,21 @@ class PynputHotkeyListener:
         self._update_mod(name, True)
         if name == self._hotkey.key and self._mods_satisfied() and not self._active:
             self._active = True
-            self._on_press(self._clock())
+            now = self._clock()  # event time, not handler-run time
+            self._dispatch.submit(lambda: self._on_press(now))
 
     def _handle_release(self, key: Any) -> None:
         name = self._key_name(key)
         if name == self._hotkey.key and self._active:
             self._active = False
-            self._on_release(self._clock())
+            now = self._clock()
+            self._dispatch.submit(lambda: self._on_release(now))
         self._update_mod(name, False)
 
     def start(self) -> None:
         from pynput import keyboard
 
+        self._dispatch.start()
         self._listener = keyboard.Listener(
             on_press=self._handle_press, on_release=self._handle_release
         )
@@ -91,3 +103,4 @@ class PynputHotkeyListener:
         if self._listener is not None:
             self._listener.stop()
             self._listener = None
+        self._dispatch.stop()

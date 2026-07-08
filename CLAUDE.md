@@ -112,14 +112,24 @@ around these — grant them or accept the degraded mode.
   tray/overlay/sound rendering) — those need a real desktop. The only
   deliberately-unbuilt item is fully automatic edit-watching (privacy-hostile;
   `correct --last` is the safe equivalent).
-- ~438 tests, 100% coverage, gate green, wheel builds.
+- ~444 tests, 100% coverage, gate green, wheel builds.
 - **Verified in CI/headless:** all logic, plus a full assembly of the real
   `build_daemon` with physical devices faked, and the cleanup pass against a real
   mock Ollama HTTP server (incl. kill-mid-flight → raw fallback).
-- **NOT yet verified on real hardware (needs a Mac/desktop):** real microphone
-  capture, real global hotkey (pynput), real STT latency (faster-whisper /
-  whisper.cpp), real paste into a focused app. These are standard libraries doing
-  standard things, but "watched it work on a Mac" is still pending.
+- **Verified with REAL components against virtual devices** (scripts in
+  `scripts/verify_linux/`, results in VERIFICATION.md): both real STT backends
+  (faster-whisper + whisper.cpp, real models, real inference), real pynput
+  hotkey via X11 key events, real clipboard-paste + keystroke injection into a
+  live focused app (snapshot/restore, no Enter), real sounddevice capture from
+  a PulseAudio virtual mic, and a robot-user E2E chaining hotkey → daemon/IPC →
+  real whisper → dictionary fix → streamed cleanup → real paste. This session
+  also caught+fixed a real bug: the pipeline ran on pynput's callback thread
+  (macOS would disable the event tap) — now handed off via
+  `dispatch.SerialDispatcher`.
+- **NOT verifiable off-Mac (macOS-specific):** pbcopy/cmd+v paste, aqua window
+  style, whisper.cpp Metal speed, permission prompts, tray rendering, physical
+  mic. Real Ollama also couldn't run here (network policy blocks the download);
+  the client is exercised against a protocol-faithful streaming mock.
 - **Logic built; only device rendering/IO pending on a desktop:**
   - Tray icon + overlay + audio cues: menu/badge/cue *logic* tested (`ui/menu.py`,
     `ui/status.py`, `ui/cues.py`); pystray/Pillow/sound rendering is the seam
