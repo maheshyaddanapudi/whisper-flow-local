@@ -354,6 +354,38 @@ def test_replace_seam_emptying_text_yields_empty() -> None:
     assert ctl.toggle().status == "empty"
 
 
+def test_on_transcript_fired_with_raw_then_replaced() -> None:
+    """The overlay seam hears the transcript, and again after replacements."""
+    heard: list[str] = []
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("i use my sequel daily"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        replace=lambda t: t.replace("my sequel", "MySQL"),
+        on_transcript=heard.append,
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
+    ctl.toggle()
+    ctl.toggle()
+    assert heard == ["i use my sequel daily", "i use MySQL daily"]
+
+
+def test_on_transcript_fired_once_without_replace() -> None:
+    heard: list[str] = []
+    deps = _Deps(
+        audio=FakeAudioSource(duration_s=1.0),
+        stt=FakeSTT("plain transcript"),
+        injection=InjectionChain([FakeInjector("f")]),
+        history=History(),
+        on_transcript=heard.append,
+    )
+    ctl = Controller(ControllerConfig(min_duration_s=0.15), deps)
+    ctl.toggle()
+    ctl.toggle()
+    assert heard == ["plain transcript"]
+
+
 def _command_controller(*, selection: str, transformed: str = "TRANSFORMED", **deps_kw):
     injector = FakeInjector("f")
     seen: dict = {}

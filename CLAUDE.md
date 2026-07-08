@@ -112,7 +112,7 @@ around these — grant them or accept the degraded mode.
   tray/overlay/sound rendering) — those need a real desktop. The only
   deliberately-unbuilt item is fully automatic edit-watching (privacy-hostile;
   `correct --last` is the safe equivalent).
-- ~429 tests, 100% coverage, gate green, wheel builds.
+- ~438 tests, 100% coverage, gate green, wheel builds.
 - **Verified in CI/headless:** all logic, plus a full assembly of the real
   `build_daemon` with physical devices faked, and the cleanup pass against a real
   mock Ollama HTTP server (incl. kill-mid-flight → raw fallback).
@@ -126,9 +126,15 @@ around these — grant them or accept the degraded mode.
     (`ui/tray.py`, omitted).
   - Live overlay: the `OverlayController` in `ui/overlay.py` (state → transcript
     → streaming refinement → `OverlayView`, + Stop) is tested; the tkinter window
-    `ui/overlay_window.py` is the seam (omitted). Streaming cleanup flows through
-    `cleanup/ollama.py::chat_stream` → `CleanupEngine.on_token`, tested against
-    the streaming mock Ollama. Config: `ui.overlay`.
+    `ui/overlay_window.py` is the seam (omitted) — but it HAS been executed for
+    real under Xvfb here (window + pump + full `Daemon.run()` E2E + screenshot),
+    and `tests/test_overlay_window_real.py` re-runs it wherever a display exists.
+    Streaming cleanup flows through `cleanup/ollama.py::chat_stream` →
+    `CleanupEngine.on_token`, tested against the streaming mock Ollama. Stop
+    while refining = `engine.abort()` → raw injected. Transcript pane is fed by
+    the controller's `on_transcript` seam. UI start failures degrade (never kill
+    the daemon); `doctor` has a `UI: overlay (tkinter)` row. Config: `ui.overlay`.
+    First check on a new desktop: `python scripts/overlay_demo.py`.
   - Streaming preview: `stt/preview.py` coordinator tested; the live mic feed +
     overlay draw are the seam. Same for `VadCapture`/`Endpointer` continuous loop.
 - **Deliberately NOT built:**

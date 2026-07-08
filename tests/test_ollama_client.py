@@ -96,6 +96,24 @@ def test_chat_stream_unreachable_raises() -> None:
         chat_stream("http://127.0.0.1:1", "m", "s", "u", lambda _t: None, timeout=0.5)
 
 
+def test_chat_stream_should_abort_raises_promptly(mock_ollama) -> None:
+    # Abort requested before the first chunk is consumed -> OllamaError, and
+    # on_token never fires (the overlay's Stop control mid-refinement).
+    mock_ollama.chat_response = lambda text: "many words that would stream slowly"
+    tokens: list[str] = []
+    with pytest.raises(OllamaError, match="aborted"):
+        chat_stream(
+            mock_ollama.host,
+            "m",
+            "s",
+            "u",
+            tokens.append,
+            timeout=2.0,
+            should_abort=lambda: True,
+        )
+    assert tokens == []
+
+
 def test_chat_stream_handles_blank_lines_and_eof_end(mock_ollama) -> None:
     # A stream that emits a blank keep-alive line and ends via EOF (no done
     # marker) must still reconstruct the full text without hanging.

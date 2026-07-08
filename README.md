@@ -127,12 +127,21 @@ locked-down corporate machines where you can't grant Accessibility), or
 ### Live overlay
 
 When you press the hotkey, a small always-on-top widget appears near the bottom
-of the screen. It shows the live partial transcript as you speak, then streams
-the LLM's cleanup **token-by-token** while it refines — so you watch the text
-tidy itself in real time — and disappears once the result is inserted. A **Stop**
-button aborts the dictation at any point. It's on by default; turn it off with
-`ui.overlay = false` (headless/daemon-only setups don't need it). The window is
-a plain overlay the running daemon shows and hides — not a separate app.
+of the screen. It shows what you said, then streams the LLM's cleanup
+**token-by-token** while it refines — so you watch the text tidy itself in real
+time — and disappears once the result is inserted. The **Stop** button aborts:
+while recording it discards the take; while refining it drops the LLM stream
+and injects the raw transcript immediately. It's on by default; turn it off
+with `ui.overlay = false`. The window is a plain overlay the running daemon
+shows and hides — not a separate app. If tkinter is missing (Homebrew Python:
+`brew install python-tk`) the daemon warns and continues without it — the UI
+never blocks dictation, and `whisper-flow doctor` reports the gap.
+
+To see the widget on a new machine before setting anything else up:
+
+```bash
+python scripts/overlay_demo.py   # scripted data; no mic or Ollama needed
+```
 
 ### macOS permissions
 

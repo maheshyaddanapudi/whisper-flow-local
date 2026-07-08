@@ -62,6 +62,18 @@ class CleanupEngine:
         self._record = record or (lambda *_a: None)
         # Live overlay: when set, completions stream token-by-token.
         self._on_token = on_token
+        # Set by abort() (the overlay's Stop control) to drop an in-flight stream.
+        self._aborted = False
+
+    def abort(self) -> None:
+        """Abort the current streaming completion (safe from any thread).
+
+        The stream check between chunks raises, ``clean()`` catches it and
+        returns ``""``, and the controller injects the raw transcript — so Stop
+        during refinement means "give me the raw text now". The flag resets at
+        the start of the next completion.
+        """
+        self._aborted = True
 
     @property
     def system_prompt(self) -> str:
@@ -78,6 +90,7 @@ class CleanupEngine:
         assistant text; the only difference is whether ``on_token`` fires as the
         model produces the text (for the live overlay).
         """
+        self._aborted = False  # a stale Stop must not kill this fresh completion
         if self._on_token is not None:
             return self._chat_stream(
                 self._host,
@@ -87,6 +100,7 @@ class CleanupEngine:
                 self._on_token,
                 keep_alive=self._keep_alive,
                 timeout=self._timeout,
+                should_abort=lambda: self._aborted,
             )
         return self._chat(
             self._host,

@@ -97,6 +97,7 @@ def test_overlay_streams_refinement_over_full_pipeline(mock_ollama) -> None:
         history=History(size=5),
         cleanup=engine.clean,
         on_state_change=notifier,
+        on_transcript=overlay.on_partial,
     )
     ctl = Controller(ControllerConfig(min_duration_s=0.15, cleanup_min_chars=50), deps)
     overlay.bind_stop(ctl.cancel)
@@ -107,8 +108,11 @@ def test_overlay_streams_refinement_over_full_pipeline(mock_ollama) -> None:
 
     assert result.status == "injected"
     assert injector.requests[0].text == "This is a cleaned sentence."
+    # The transcript pane showed what was heard while the refinement streamed.
+    during_cleaning = [v for v in surface.views if v.refined]
+    assert all(v.transcript == RAW for v in during_cleaning)
     # The overlay saw the refinement stream token-by-token, then hid at idle.
-    streamed = [v.refined for v in surface.views if v.refined]
+    streamed = [v.refined for v in during_cleaning]
     assert streamed[-1] == "This is a cleaned sentence."
     assert len(streamed) >= 2  # arrived in pieces, not one shot
     assert surface.views[-1].visible is False

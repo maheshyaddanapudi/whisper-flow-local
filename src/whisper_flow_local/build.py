@@ -122,6 +122,7 @@ def build_daemon(config: Config) -> Daemon:
         resolve_profile=build_profile_resolver(profiles, detect_frontmost),
         transparency=log if bool(config.get("transparency.enabled")) else None,
         on_state_change=notifier,
+        on_transcript=overlay_ctl.on_partial if overlay_ctl is not None else None,
         notify=notify,
     )
     controller = Controller(build_controller_config(config, dictionary), deps)
@@ -136,9 +137,16 @@ def build_daemon(config: Config) -> Daemon:
         notifier.register(tray.on_state_change)
         daemon.attach_tray(tray)
     if overlay_ctl is not None:
-        # The stop control aborts the current dictation; state changes drive the
-        # widget's visibility/labels; the mic feed and refinement stream update it.
-        overlay_ctl.bind_stop(controller.cancel)
+        # Stop while recording -> cancel/discard. Stop while refining -> abort
+        # the in-flight LLM stream (the pipeline then injects the raw text).
+        # Aborting first matters: cancel() blocks on the controller lock while
+        # a pipeline run is in flight, and the abort is what unblocks it fast.
+        def stop_dictation() -> object:
+            if engine is not None:
+                engine.abort()
+            return controller.cancel()
+
+        overlay_ctl.bind_stop(stop_dictation)
         notifier.register(overlay_ctl.on_state)
         daemon.attach_overlay(overlay_window)
     return daemon

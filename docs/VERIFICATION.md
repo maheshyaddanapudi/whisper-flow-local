@@ -188,7 +188,7 @@ CI.
 
 ## Phase 5 — Differentiators 🟢 all 6 built (logic complete)
 
-**Automated.** 429 tests, **100% line+branch coverage**; ruff + strict mypy clean.
+**Automated.** 438 tests, **100% line+branch coverage**; ruff + strict mypy clean.
 
 **Built and tested (with end-to-end demos against the real mock Ollama where
 applicable):**
@@ -210,19 +210,47 @@ applicable):**
   feeding it live growing audio and rendering the overlay are the device seam.
 - **Live overlay widget + streaming refinement** — on the hotkey press the
   daemon enters `recording` and the overlay coordinator (`ui/overlay.py`) shows
-  the widget, mirrors the live partial transcript, then streams the LLM's
-  cleanup **token-by-token** (`cleanup.chat_stream` → `CleanupEngine.on_token`)
-  while `cleaning`, and hides on `idle`; a Stop control aborts the dictation
-  (wired to `controller.cancel`). All of that is tested over a fake surface and
-  a streaming mock Ollama; only the tkinter window (`ui/overlay_window.py`) is
-  the device seam. The streaming client is verified end-to-end against the mock
-  server (token emission, blank-line/EOF handling, mid-flight failure → raw
-  fallback).
+  the widget, mirrors the transcript (`on_transcript` seam, fired after STT and
+  again after dictionary replacements), then streams the LLM's cleanup
+  **token-by-token** (`cleanup.chat_stream` → `CleanupEngine.on_token`) while
+  `cleaning`, and hides on `idle`. The **Stop control** aborts: while recording
+  it cancels/discards; while refining it aborts the in-flight stream
+  (`engine.abort()` → `should_abort` polled between chunks) and the raw
+  transcript is injected immediately — refinement never holds the text hostage.
+  All tested over a fake surface and a streaming mock Ollama (token emission,
+  blank-line/EOF handling, mid-flight failure → raw, abort → raw, stale-abort
+  reset).
+
+**Pre-production bug hunt (found + fixed before any desktop run):** an
+adversarial re-review of the overlay path caught six defects that unit tests
+could not see because they lived in or around the coverage-omitted seams:
+(1) the Tk mainloop was never run by the daemon (widget would never draw);
+(2) `render()` touched Tk from pipeline threads (unsafe; now a thread-safe
+queue drained by a Tk-side pump); (3) nothing fed the transcript pane in the
+production wiring (now the `on_transcript` seam); (4) Stop couldn't abort an
+in-flight stream (now `engine.abort()`); (5) a failing tray/overlay start
+killed the whole daemon (now dropped with a warning — UI never gates
+dictation); (6) `doctor` didn't check tkinter (now a `UI: overlay` row with
+the `brew install python-tk` hint).
+
+**Manual end-to-end (run here, under Xvfb — a real display server):** the
+coverage-omitted `ui/overlay_window.py` was executed for real with tkinter
+8.6: window construction, the cross-thread queue pump, show/hide, the Stop
+button dispatch, and clean teardown. Then a **full real `Daemon.run()`**
+(signal handlers, overlay owning the main thread, real Unix-socket IPC, real
+`CleanupEngine` streaming from the mock Ollama) drove a complete dictation —
+`toggle` → recording → transcript shown → refinement streamed token-by-token
+into the real window → cleaned text injected → SIGTERM shutdown, exit 0. A
+screenshot of the widget mid-refinement was captured. The permanent
+`tests/test_overlay_window_real.py` re-runs the real-window lifecycle wherever
+a display exists (the macOS CI leg runs real Tk) and asserts the graceful
+degrade contract where none does. `scripts/overlay_demo.py` shows the widget
+with scripted data on any machine — run it first on a new desktop.
 
 **What remains device-only (not a logic gap — the pixels/IO themselves):**
-- Tray icon rendering, the tkinter overlay window rendering, the sound playback,
-  and feeding the streaming coordinator from a live mic — all need a real
-  desktop.
+- macOS-native rendering details (the aqua borderless "help" window style,
+  Retina font metrics), tray icon rendering, sound playback, and feeding the
+  streaming-preview coordinator from a live mic — these need the real Mac.
 - **Fully automatic edit-watching** (infer corrections by silently monitoring
   everything you retype) is deliberately **not** built: it is keylogger-shaped
   and privacy-hostile. `correct --last` is the safe, explicit equivalent.

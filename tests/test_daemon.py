@@ -193,3 +193,28 @@ def test_daemon_manages_overlay(tmp_path) -> None:
     assert overlay.started
     daemon.stop()
     assert overlay.stopped
+
+
+def test_daemon_survives_ui_start_failure(tmp_path, capsys) -> None:
+    """UI must never gate dictation: a tray/overlay that fails to start is
+    dropped (with a warning), the daemon keeps serving, and stop() never
+    touches the broken component."""
+
+    class BrokenUI:
+        def start(self) -> None:
+            raise RuntimeError("no display")
+
+        def stop(self) -> None:  # must NOT be reached
+            raise AssertionError("stop() called on a UI that failed to start")
+
+    daemon = Daemon(_controller(), tmp_path / "wf.sock")
+    daemon.attach_tray(BrokenUI())
+    daemon.attach_overlay(BrokenUI())
+    daemon.start()
+    try:
+        assert send(tmp_path / "wf.sock", "ping")["data"]["pong"] is True
+    finally:
+        daemon.stop()  # would raise if the broken components were kept
+    err = capsys.readouterr().err
+    assert "tray disabled" in err
+    assert "overlay disabled" in err

@@ -118,11 +118,16 @@ def chat_stream(
     keep_alive: str = "30m",
     timeout: float = 8.0,
     temperature: float = 0.0,
+    should_abort: Callable[[], bool] | None = None,
 ) -> str:
     """Streaming ``POST /api/chat``: calls ``on_token`` per chunk, returns the full text.
 
     Ollama streams newline-delimited JSON, each line carrying a ``message.content``
     fragment. Raises :class:`OllamaError` on any transport/decode failure.
+
+    ``should_abort`` is polled between chunks (the overlay's Stop control): when
+    it returns True the stream is dropped and :class:`OllamaError` is raised, so
+    the caller falls back to the raw transcript immediately.
     """
     url = host.rstrip("/") + "/api/chat"
     payload = {
@@ -143,6 +148,8 @@ def chat_stream(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             for raw_line in resp:
+                if should_abort is not None and should_abort():
+                    raise OllamaError("ollama stream aborted by user")
                 line = raw_line.decode("utf-8").strip()
                 if not line:
                     continue

@@ -78,6 +78,9 @@ class _Deps:
     resolve_profile: ProfileFn | None = None
     transparency: TransparencyLog | None = None
     on_state_change: Callable[[State], None] = lambda _s: None
+    # Fired with the transcript once STT produces it (and again after dictionary
+    # replacements) so the live overlay can show what was heard.
+    on_transcript: Callable[[str], None] | None = None
     notify: dict[str, Callable[[], None]] = field(default_factory=dict)
 
 
@@ -234,6 +237,7 @@ class Controller:
             self._sm.to(State.IDLE)
             self._to_idle()
             return DictationResult(status="empty")
+        self._emit_transcript(raw)
 
         # Command mode: the transcript is an instruction; transform the selected
         # text with it instead of dictating.
@@ -248,6 +252,7 @@ class Controller:
                 self._sm.to(State.IDLE)
                 self._to_idle()
                 return DictationResult(status="empty")
+            self._emit_transcript(raw)
 
         # A per-app profile can force cleanup on/off for this app (e.g. a
         # terminal profile turns it off so punctuation isn't "fixed").
@@ -317,6 +322,11 @@ class Controller:
             trailing_space=self._cfg.trailing_space,
         )
         return self._d.injection.inject(req)
+
+    def _emit_transcript(self, text: str) -> None:
+        """Report the (possibly replacement-corrected) transcript to the overlay."""
+        if self._d.on_transcript is not None:
+            self._d.on_transcript(text)
 
     def _to_idle(self) -> None:
         self._resolver.reset()

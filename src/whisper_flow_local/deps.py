@@ -12,10 +12,12 @@ reported capability, not a crash.
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import platform
 import shutil
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from .cleanup.ollama import has_model, probe
@@ -110,6 +112,25 @@ def _hotkey_capabilities() -> list[Capability]:
     return caps
 
 
+def _ui_capabilities(
+    importer: Callable[[str], object] = importlib.import_module,
+) -> list[Capability]:
+    """UI seams: the overlay needs tkinter (a real import test, not find_spec —
+    the module can exist while the Tcl/Tk libraries are missing)."""
+    try:
+        importer("tkinter")
+        tk_ok = True
+    except Exception:
+        tk_ok = False
+    hint = (
+        "live dictation overlay window"
+        if tk_ok
+        else "overlay disabled — install python-tk (macOS Homebrew: brew install "
+        "python-tk) or set ui.overlay=false"
+    )
+    return [Capability("UI: overlay (tkinter)", tk_ok, hint)]
+
+
 def _degradation_level(caps: list[Capability]) -> str:
     by_name = {c.name: c.available for c in caps}
     has_stt = by_name.get("STT: faster-whisper") or by_name.get("STT: whisper.cpp")
@@ -160,6 +181,7 @@ def collect(config: Config) -> list[Capability]:
         )
     caps.extend(_injection_capabilities())
     caps.extend(_hotkey_capabilities())
+    caps.extend(_ui_capabilities())
     return caps
 
 

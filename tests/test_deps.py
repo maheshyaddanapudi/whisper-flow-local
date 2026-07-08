@@ -82,6 +82,22 @@ def test_hotkey_capabilities_non_linux(monkeypatch) -> None:
     assert not any(c.name == "Hotkey: evdev" for c in caps)
 
 
+def test_ui_capabilities_tkinter_present() -> None:
+    caps = deps._ui_capabilities(importer=lambda name: object())
+    assert caps[0].name == "UI: overlay (tkinter)"
+    assert caps[0].available is True
+    assert "overlay" in caps[0].detail
+
+
+def test_ui_capabilities_tkinter_missing() -> None:
+    def importer(name: str) -> object:
+        raise ImportError("No module named '_tkinter'")
+
+    caps = deps._ui_capabilities(importer=importer)
+    assert caps[0].available is False
+    assert "python-tk" in caps[0].detail  # the actionable macOS hint
+
+
 def test_degradation_levels() -> None:
     from whisper_flow_local.deps import Capability, _degradation_level
 

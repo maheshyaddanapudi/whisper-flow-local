@@ -188,11 +188,17 @@ ADVERSARIAL = [
 
 
 def _fake_stream(text: str):
-    """A chat_stream that emits ``text`` in word chunks via on_token."""
+    """A chat_stream that emits ``text`` in word chunks via on_token.
+
+    Honors ``should_abort`` between chunks, like the real client.
+    """
 
     def stream(host, model, system, user, on_token, **kw):
+        should_abort = kw.get("should_abort")
         chunks = text.split(" ")
         for i, chunk in enumerate(chunks):
+            if should_abort is not None and should_abort():
+                raise OllamaError("aborted")
             on_token(chunk if i == len(chunks) - 1 else chunk + " ")
         return text
 
@@ -236,6 +242,34 @@ def test_engine_streaming_failure_still_falls_back() -> None:
         host="h", model="m", goals=CleanupGoals(), chat_stream=boom, on_token=lambda _t: None
     )
     assert eng.clean("a reasonably long raw transcript") == ""
+
+
+def test_engine_abort_mid_stream_falls_back_to_raw(mock_ollama) -> None:
+    """User hits Stop after the first streamed token -> clean() returns ""."""
+    mock_ollama.chat_response = lambda text: "a long refined sentence with many words"
+    engines: list[CleanupEngine] = []
+    eng = CleanupEngine(
+        host=mock_ollama.host,
+        model="m",
+        goals=CleanupGoals(),
+        # The overlay's Stop control fires while tokens stream in.
+        on_token=lambda _t: engines[0].abort(),
+    )
+    engines.append(eng)
+    assert eng.clean("a reasonably long raw transcript to be cleaned") == ""
+
+
+def test_engine_abort_flag_resets_for_next_completion() -> None:
+    """A stale Stop from the previous dictation must not kill the next one."""
+    eng = CleanupEngine(
+        host="h",
+        model="m",
+        goals=CleanupGoals(),
+        chat_stream=_fake_stream("Cleaned next dictation."),
+        on_token=lambda _t: None,
+    )
+    eng.abort()  # user stopped something earlier (or clicked Stop while idle)
+    assert eng.clean("um cleaned next dictation") == "Cleaned next dictation."
 
 
 def test_engine_without_on_token_uses_plain_chat() -> None:
