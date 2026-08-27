@@ -1,0 +1,126 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "whisper-flow-local"
+version = "0.1.0"
+description = "Fully local, privacy-first dictation: global hotkey to Whisper STT to Ollama cleanup to text in any app"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "whisper-flow-local contributors" }]
+keywords = ["dictation", "speech-to-text", "whisper", "ollama", "local", "privacy"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Speech",
+]
+
+# Core has NO required third-party dependencies: the daemon, config, IPC,
+# prompt builder, replacement engine and Ollama probe all run on the stdlib.
+# Hardware-facing pieces (audio, STT, hotkeys, injection, tray) are optional
+# extras, imported lazily so the core stays importable and testable anywhere.
+dependencies = []
+
+[project.optional-dependencies]
+# Everything needed for real dictation on a desktop.
+dictation = [
+    "numpy>=1.24",
+    "sounddevice>=0.4.6",
+    "faster-whisper>=1.0.0",
+    "pynput>=1.7.6",
+    "webrtcvad>=2.0.10",
+]
+# Optional tray + overlay UI.
+ui = [
+    "pystray>=0.19",
+    "Pillow>=10.0",
+]
+# macOS-native STT (Metal/CoreML) and window/app detection.
+macos = [
+    "pywhispercpp>=1.2.0",
+    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pre-commit>=3.7",
+]
+
+[project.scripts]
+whisper-flow = "whisper_flow_local.cli:main"
+
+[project.urls]
+Repository = "https://github.com/maheshyaddanapudi/whisper-flow-local"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/whisper_flow_local"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["N818"]  # allow exceptions without "Error" suffix
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+files = ["src/whisper_flow_local"]
+# Optional hardware deps are absent in CI/dev; ignore their missing stubs.
+[[tool.mypy.overrides]]
+module = [
+    "sounddevice.*",
+    "faster_whisper.*",
+    "pynput.*",
+    "webrtcvad.*",
+    "pystray.*",
+    "PIL.*",
+    "numpy.*",
+    "pywhispercpp.*",
+    "Quartz.*",
+    "AppKit.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.coverage.run]
+branch = true
+source = ["whisper_flow_local"]
+omit = [
+    # Thin hardware/device adapters: covered by fakes at the interface seam,
+    # not by importing real device libraries (absent in CI). Logic lives on the
+    # tested side of each seam. See tests/README.md for the policy.
+    "src/whisper_flow_local/audio_capture.py",
+    "src/whisper_flow_local/stt/fasterwhisper.py",
+    "src/whisper_flow_local/stt/whispercpp.py",
+    "src/whisper_flow_local/inject/system.py",
+    "src/whisper_flow_local/hotkeys/pynput_listener.py",
+    "src/whisper_flow_local/build.py",
+    "src/whisper_flow_local/ui/tray.py",
+    "src/whisper_flow_local/ui/overlay_window.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "\\.\\.\\.",
+]

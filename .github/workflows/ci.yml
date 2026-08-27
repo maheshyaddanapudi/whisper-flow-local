@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+      - name: Set up Python
+        run: uv python install ${{ matrix.python }}
+      - name: Install (dev)
+        # Core + dev only. Hardware extras are intentionally excluded: tests
+        # exercise the seams via fakes, so CI needs no audio/STT devices.
+        run: uv pip install --system -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests
+      - name: Format check
+        run: ruff format --check src tests
+      - name: Type check
+        run: mypy
+      - name: Test with coverage
+        run: pytest --cov=whisper_flow_local --cov-branch --cov-report=term-missing --cov-fail-under=100
