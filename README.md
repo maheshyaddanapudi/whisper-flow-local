@@ -10,7 +10,9 @@ It's an original, MIT-licensed take on Wispr Flow / Superwhisper. Unlike Wispr
 Flow — whose transcription [always happens in the cloud](docs/RESEARCH.md) — this
 never sends your voice off the machine.
 
-> **Status: all six phases (0–5) built and tested at 100% coverage.** The full
+> **Status: all six phases (0–5) built and tested at 100% line + branch coverage**
+> (thin hardware/device adapters are excluded and tested via fakes — see
+> [tests/README.md](tests/README.md)). The full
 > hotkey→record→transcribe→**Ollama cleanup**→inject loop, IPC/CLI, injection
 > with snapshot/restore, personal dictionary, two-layer VAD, cross-platform
 > injection, packaging — plus the Phase 5 differentiators: command/instruction
